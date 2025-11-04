@@ -10,7 +10,7 @@
   "use strict";
 
   // ضع رابط /exec تبع GAS
-  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbwHadqtLWyHFoiwr12co13DKn6NV35KPJHqZvSwwY6nBveZsgCdwl5kDOcjtV6wXqZz/exec";
+  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbwn9L6H5QRCprldOqK80p7U1cqdTuXH6VKF4aUVpeXm31WulSoBZPCQKgwQXyO4uHYL/exec";
 
   const state = {
     gasUrl: GAS_URL_DEFAULT,
