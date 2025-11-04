@@ -1,96 +1,91 @@
 /* =========================================================
-   js/api-gas.js
-   طبقة التواصل مع Google Apps Script (GAS) لواجهة الويب
-   - GET جميع البيانات
-   - POST إضافة سجل/استيراد سجلات
-   - استيراد CSV (ملف أو نص)
-   - اكتشاف نوع التمبليت (Inpatient/Outpatient)
-   - معالجة CORS بدون preflight + إعادة المحاولة + تقليل الحركات
+   js/api-gas.js  —  JSONP Edition (READ + WRITE via GET)
+   - كل العمليات عبر GET لتجنّب CORS تمامًا
+   - القراءة: action=get
+   - إضافة سجل: action=add&payload=<b64>
+   - استيراد عدة سجلات: action=import&payload=<b64>
    ========================================================= */
 
 (function (global) {
   "use strict";
 
-  // عدّل هذا المتغيّر مرة واحدة فقط (رابط نشر الويب أب من GAS):
-  // مثال: https://script.google.com/macros/s/AKfycby.../exec
-  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbyeUzFTGq-_ZPcaPQaY0TxnbxuWJa-JkvZg8MEG8baYksrxRkHJ7C5apV5YCJz_HThk/exec";
+  // ضع رابط /exec تبع GAS
+  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbwHadqtLWyHFoiwr12co13DKn6NV35KPJHqZvSwwY6nBveZsgCdwl5kDOcjtV6wXqZz/exec";
 
-  // حالة داخلية + إعدادات
   const state = {
     gasUrl: GAS_URL_DEFAULT,
     lastFetchTs: 0,
-    cacheTTLms: 12 * 1000, // 12 ثانية كذاكرة مؤقتة بسيطة لتخفيف الطلبات
-    memoryCache: null,     // كاش قوية لعرض الجدول مباشرة
+    cacheTTLms: 12 * 1000,
+    memoryCache: null,
   };
 
-  // أداة تأخير
-  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
-
-  // إعادة المحاولة مع Backoff
-  async function withRetry(fn, { tries = 3, baseDelay = 300 } = {}) {
-    let attempt = 0;
-    while (true) {
-      try {
-        return await fn();
-      } catch (err) {
-        attempt++;
-        if (attempt >= tries) throw err;
-        await delay(baseDelay * Math.pow(2, attempt - 1));
-      }
-    }
+  function setGasUrl(url) {
+    if (typeof url === "string" && url.trim()) state.gasUrl = url.trim();
   }
 
-  // إرسال طلب JSON موحّد إلى GAS
-  // ملاحظة مهمة: لا نضع Content-Type للـ POST حتى يبقى "simple request" بدون preflight OPTIONS
-  async function gasFetchJson(method, payload) {
-    const url = state.gasUrl || GAS_URL_DEFAULT;
+  // ----------------------- JSONP Core -----------------------
+  function jsonp(url, { timeoutMs = 20000 } = {}) {
+    return new Promise((resolve, reject) => {
+      const cb = "cb_" + Math.random().toString(36).slice(2);
+      const cleanup = () => {
+        try { delete window[cb]; } catch {}
+        if (script && script.parentNode) script.parentNode.removeChild(script);
+      };
+      const script = document.createElement("script");
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("JSONP timeout"));
+      }, timeoutMs);
 
-    const opts = { method, redirect: "follow" };
-    if (method === "POST") {
-      // نجعل الجسم نصًا عادياً؛ المتصفّح يضع text/plain تلقائيًا بلا هيدرز مخصّصة
-      opts.body = payload ? JSON.stringify(payload) : "";
-    }
+      window[cb] = (data) => {
+        clearTimeout(timer);
+        cleanup();
+        resolve(data);
+      };
+      script.onerror = (e) => {
+        clearTimeout(timer);
+        cleanup();
+        reject(new Error("JSONP network error"));
+      };
 
-    return withRetry(async () => {
-      const res = await fetch(url, opts);
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`GAS fetch failed (${res.status}): ${text}`);
-      }
-      const text = await res.text();
-      try { return JSON.parse(text); } catch { return text ? { raw: text } : { status: "success" }; }
+      script.src = appendQuery(url, { callback: cb });
+      document.body.appendChild(script);
     });
   }
 
-  // ======================================================
-  // واجهات عامة للتعامل مع GAS
-  // ======================================================
-
-  function setGasUrl(url) {
-    if (typeof url === "string" && url.trim()) {
-      state.gasUrl = url.trim();
-    }
+  function appendQuery(base, params) {
+    const qs = Object.entries(params)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+      .join("&");
+    return base + (base.includes("?") ? "&" : "?") + qs;
   }
 
-  // قراءة كل السجلات (مع ذاكرة مؤقتة قصيرة)
+  // Base64 web-safe (بدون مكتبات)
+  function b64webSafe(str) {
+    // btoa يتطلب ASCII؛ لذلك نحول UTF-8 يدويًا
+    const utf8 = unescape(encodeURIComponent(str));
+    const b64 = btoa(utf8);
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  // ----------------------- API Calls via JSONP -----------------------
   async function getAllRecords({ force = false } = {}) {
     const now = Date.now();
     const fresh = now - state.lastFetchTs < state.cacheTTLms;
-    if (!force && fresh && Array.isArray(state.memoryCache)) {
-      return state.memoryCache;
-    }
-    const data = await gasFetchJson("GET");
+    if (!force && fresh && Array.isArray(state.memoryCache)) return state.memoryCache;
+
+    const url = appendQuery(state.gasUrl, { action: "get" });
+    const data = await jsonp(url);
     const list = Array.isArray(data) ? data : (Array.isArray(data.records) ? data.records : []);
     state.memoryCache = list;
     state.lastFetchTs = Date.now();
     return list;
   }
 
-  // إضافة سجل واحد
   async function addRecord(record) {
-    const payload = { action: "add", record };
-    const res = await gasFetchJson("POST", payload);
-    // تحديث كاش محلي سريع
+    const payload = b64webSafe(JSON.stringify({ record }));
+    const url = appendQuery(state.gasUrl, { action: "add", payload });
+    const res = await jsonp(url);
     try {
       if (!state.memoryCache) state.memoryCache = [];
       state.memoryCache.push({
@@ -105,18 +100,38 @@
     return res;
   }
 
-  // استيراد مجموعة سجلات دفعة واحدة
+  // تقسيم دفعات الاستيراد لتجنّب طول URL (آمن ~7000 حرف)
   async function importRecords(records) {
-    const payload = { action: "import", records: records || [] };
-    const res = await gasFetchJson("POST", payload);
+    if (!Array.isArray(records) || records.length === 0) return { status: "noop" };
+
+    const MAX_URL_CHARS = 7000;
+    let i = 0;
+    while (i < records.length) {
+      // جرّب زيادة حجم الدفعة تدريجيًا
+      let size = Math.min(200, records.length - i);
+      while (size > 0) {
+        const slice = records.slice(i, i + size);
+        const payloadStr = JSON.stringify({ records: slice });
+        const payload = b64webSafe(payloadStr);
+        const testUrl = appendQuery(state.gasUrl, { action: "import", payload, callback: "x" });
+        if (testUrl.length <= MAX_URL_CHARS) {
+          // نفّذ الطلب الحقيقي
+          const url = appendQuery(state.gasUrl, { action: "import", payload });
+          await jsonp(url);
+          i += size;
+          break;
+        }
+        size = Math.floor(size / 2); // صغّر الدفعة
+      }
+      if (size === 0) throw new Error("Record too large for JSONP import; reduce record size.");
+    }
+
+    // تحديث الكاش
     await getAllRecords({ force: true });
-    return res;
+    return { status: "success" };
   }
 
-  // ======================================================
-  // CSV Utilities
-  // ======================================================
-
+  // ----------------------- CSV Utilities (كما كانت) -----------------------
   function detectTemplateType(headers) {
     const H = headers.map((h) => (h || "").toLowerCase().trim());
     const hasInpatientHints = H.includes("patient age") || H.includes("room") || H.includes("admitting provider");
@@ -126,7 +141,6 @@
     return "inpatient";
   }
 
-  // Parser بسيط للـ CSV
   function parseCsv(text, { delimiter = "," } = {}) {
     const rows = [];
     let row = [];
@@ -152,7 +166,6 @@
     return rows;
   }
 
-  // تحويل صفوف CSV إلى كائنات
   function rowsToObjects(rows) {
     if (!rows || !rows.length) return [];
     const headers = rows[0].map((h) => String(h || "").trim());
@@ -178,18 +191,15 @@
     return { objects, headers };
   }
 
-  // تطبيع الحقول الأساسية للتطبيق
   function normalizeRecordsForApp(objects, { defaultDepartment = "", defaultMember = "", visitTypeField = "Visit Type", otherVisitField = "Visit Other" } = {}) {
     return objects.map((src) => {
       const rec = { ...src };
-
       const pCode = rec["Patient Code"] || rec["Code"] || "";
       const pName = rec["Patient Name"] || rec["Name"] || "";
       let intervention = rec["Intervention"] || rec["intervention"] || "";
       let department = rec["Department"] || rec["department"] || defaultDepartment || "";
       let member = rec["Palliative Member"] || rec["Palliative member"] || rec["Member"] || defaultMember || "";
 
-      // دعم Visit Type = other + نص حر
       const visitTypeRaw = rec[visitTypeField] || rec["visit type"] || rec["VisitType"] || "";
       const otherText = rec[otherVisitField] || rec["Other"] || rec["other"] || "";
       if (visitTypeRaw) {
@@ -202,12 +212,10 @@
       rec["Intervention"] = intervention;
       rec["Department"] = department;
       rec["Palliative Member"] = member;
-
       return rec;
     });
   }
 
-  // استيراد CSV من نص خام
   async function importCsvText(csvText, { defaultDepartment = "", defaultMember = "" } = {}) {
     const rows = parseCsv(csvText);
     const { objects, headers } = rowsToObjects(rows);
@@ -217,7 +225,6 @@
     return { res, count: normalized.length, templateType };
   }
 
-  // استيراد CSV من ملف
   async function importCsvFile(file, { defaultDepartment = "", defaultMember = "" } = {}) {
     const csvText = await readFileAsText(file);
     return importCsvText(csvText, { defaultDepartment, defaultMember });
@@ -232,7 +239,6 @@
     });
   }
 
-  // أدوات إضافية
   async function addMany(records) {
     if (!Array.isArray(records) || records.length === 0) return { status: "noop" };
     return importRecords(records);
@@ -247,7 +253,7 @@
     }
   }
 
-  // تصدير الواجهة
+  // تصدير
   const API = {
     setGasUrl,
     getAllRecords,
