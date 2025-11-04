@@ -13,7 +13,7 @@
 
   // عدّل هذا المتغيّر مرة واحدة فقط (رابط نشر الويب أب من GAS):
   // مثال: https://script.google.com/macros/s/AKfycby.../exec
-  const GAS_URL_DEFAULT = "PUT-YOUR-GAS-WEB-APP-URL-HERE";
+  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbx2F9F5ecrqLHNybY3ye4RpQuDClmZIvjMRLvbunSH3AU6qFDMspd9_MxZqK5hhqlo/exec";
 
   // حالة داخلية + إعدادات
   const state = {
