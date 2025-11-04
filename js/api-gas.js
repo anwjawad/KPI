@@ -13,7 +13,7 @@
 
   // عدّل هذا المتغيّر مرة واحدة فقط (رابط نشر الويب أب من GAS):
   // مثال: https://script.google.com/macros/s/AKfycby.../exec
-  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbzzhC5G2h2NcPEGu25Vj94BRRDTiQ1J2tj9hITCotijZ19duRP-PjwNlYvRREcGURlC/exec";
+  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbyZKUBFdVkVkAvQ3bR0Qnq8bEXxjw13xoC9q2bPgiGqHAYnIeGgFNNleg5acr5Pn2PNuw/exec";
 
   // حالة داخلية + إعدادات
   const state = {
