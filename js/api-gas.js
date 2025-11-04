@@ -5,7 +5,7 @@
    - POST إضافة سجل/استيراد سجلات
    - استيراد CSV (ملف أو نص)
    - اكتشاف نوع التمبليت (Inpatient/Outpatient)
-   - معالجة CORS + إعادة المحاولة + تقليل الحركات
+   - معالجة CORS بدون preflight + إعادة المحاولة + تقليل الحركات
    ========================================================= */
 
 (function (global) {
@@ -13,7 +13,7 @@
 
   // عدّل هذا المتغيّر مرة واحدة فقط (رابط نشر الويب أب من GAS):
   // مثال: https://script.google.com/macros/s/AKfycby.../exec
-  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbx2F9F5ecrqLHNybY3ye4RpQuDClmZIvjMRLvbunSH3AU6qFDMspd9_MxZqK5hhqlo/exec";
+  const GAS_URL_DEFAULT = "https://script.google.com/macros/s/AKfycbyeUzFTGq-_ZPcaPQaY0TxnbxuWJa-JkvZg8MEG8baYksrxRkHJ7C5apV5YCJz_HThk/exec";
 
   // حالة داخلية + إعدادات
   const state = {
@@ -41,35 +41,24 @@
   }
 
   // إرسال طلب JSON موحّد إلى GAS
+  // ملاحظة مهمة: لا نضع Content-Type للـ POST حتى يبقى "simple request" بدون preflight OPTIONS
   async function gasFetchJson(method, payload) {
     const url = state.gasUrl || GAS_URL_DEFAULT;
-    const opts = {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      redirect: "follow",
-    };
+
+    const opts = { method, redirect: "follow" };
     if (method === "POST") {
-      opts.body = JSON.stringify(payload || {});
+      // نجعل الجسم نصًا عادياً؛ المتصفّح يضع text/plain تلقائيًا بلا هيدرز مخصّصة
+      opts.body = payload ? JSON.stringify(payload) : "";
     }
 
     return withRetry(async () => {
       const res = await fetch(url, opts);
       if (!res.ok) {
-        // في حال كانت OPTIONS/CORS على بعض الشبكات، GAS يردّ doOptions
-        // ومع ذلك نحن نطلب GET/POST فقط هنا.
         const text = await res.text().catch(() => "");
         throw new Error(`GAS fetch failed (${res.status}): ${text}`);
       }
-      // قد يعيد GAS نص JSON
       const text = await res.text();
-      try {
-        return JSON.parse(text);
-      } catch {
-        // لو رجع نص فارغ (مثلاً doPost success بدون جسم)، نرجّع كائن بسيط
-        return text ? { raw: text } : { status: "success" };
-      }
+      try { return JSON.parse(text); } catch { return text ? { raw: text } : { status: "success" }; }
     });
   }
 
@@ -77,20 +66,13 @@
   // واجهات عامة للتعامل مع GAS
   // ======================================================
 
-  /**
-   * تعيين/تغيير رابط GAS
-   */
   function setGasUrl(url) {
     if (typeof url === "string" && url.trim()) {
       state.gasUrl = url.trim();
     }
   }
 
-  /**
-   * قراءة كل السجلات (مع ذاكرة مؤقتة قصيرة)
-   * يعيد مصفوفة من الكائنات:
-   * [{ Patient Code, Patient Name, Intervention, Department, Palliative Member, Date }, ...]
-   */
+  // قراءة كل السجلات (مع ذاكرة مؤقتة قصيرة)
   async function getAllRecords({ force = false } = {}) {
     const now = Date.now();
     const fresh = now - state.lastFetchTs < state.cacheTTLms;
@@ -98,28 +80,17 @@
       return state.memoryCache;
     }
     const data = await gasFetchJson("GET");
-    // تأكّد من المصفوفة
     const list = Array.isArray(data) ? data : (Array.isArray(data.records) ? data.records : []);
     state.memoryCache = list;
     state.lastFetchTs = Date.now();
     return list;
   }
 
-  /**
-   * إضافة سجل واحد
-   * record: {
-   *   "Patient Code": "...",
-   *   "Patient Name": "...",
-   *   "Intervention": "...",
-   *   "Department": "...",
-   *   "Palliative Member": "...",
-   *   // Date يُحدد على السيرفر
-   * }
-   */
+  // إضافة سجل واحد
   async function addRecord(record) {
     const payload = { action: "add", record };
     const res = await gasFetchJson("POST", payload);
-    // بعد الإضافة، نحدّث الكاش محليًا بسرعة
+    // تحديث كاش محلي سريع
     try {
       if (!state.memoryCache) state.memoryCache = [];
       state.memoryCache.push({
@@ -134,15 +105,10 @@
     return res;
   }
 
-  /**
-   * استيراد مجموعة سجلات دفعة واحدة
-   * records: Array<record>
-   * - سيجري تجاهل أعمدة Unnamed على السيرفر أيضًا
-   */
+  // استيراد مجموعة سجلات دفعة واحدة
   async function importRecords(records) {
     const payload = { action: "import", records: records || [] };
     const res = await gasFetchJson("POST", payload);
-    // بعد الاستيراد، اجلب الكل بقوة لتحديث الجدول
     await getAllRecords({ force: true });
     return res;
   }
@@ -151,25 +117,16 @@
   // CSV Utilities
   // ======================================================
 
-  /**
-   * كشف نوع التمبليت (تجريبي وبسيط)
-   * - لو يحتوي الهيدر على حقول: Patient Age أو Room -> Inpatient
-   * - لو يحتوي على Intervention أو Visit Type -> Outpatient
-   */
   function detectTemplateType(headers) {
     const H = headers.map((h) => (h || "").toLowerCase().trim());
     const hasInpatientHints = H.includes("patient age") || H.includes("room") || H.includes("admitting provider");
     const hasOutpatientHints = H.includes("intervention") || H.includes("visit type") || H.includes("opc");
     if (hasInpatientHints && !hasOutpatientHints) return "inpatient";
     if (hasOutpatientHints && !hasInpatientHints) return "outpatient";
-    // لو مختلط أو غير واضح، نختار "inpatient" كافتراضي حسب التمبليت المرسل
     return "inpatient";
   }
 
-  /**
-   * Parser بسيط للـ CSV (بدون مكتبات خارجية)
-   * يدعم: فواصل ، اقتباس مزدوج ، أسطر جديدة
-   */
+  // Parser بسيط للـ CSV
   function parseCsv(text, { delimiter = "," } = {}) {
     const rows = [];
     let row = [];
@@ -180,46 +137,22 @@
       const c = text[i];
       if (inQuotes) {
         if (c === '"') {
-          if (text[i + 1] === '"') {
-            // escaped quote
-            cur += '"';
-            i++;
-          } else {
-            inQuotes = false;
-          }
-        } else {
-          cur += c;
-        }
+          if (text[i + 1] === '"') { cur += '"'; i++; }
+          else { inQuotes = false; }
+        } else cur += c;
       } else {
-        if (c === '"') {
-          inQuotes = true;
-        } else if (c === delimiter) {
-          row.push(cur);
-          cur = "";
-        } else if (c === "\n") {
-          row.push(cur);
-          rows.push(row);
-          row = [];
-          cur = "";
-        } else if (c === "\r") {
-          // ignore \r (windows newlines)
-        } else {
-          cur += c;
-        }
+        if (c === '"') inQuotes = true;
+        else if (c === delimiter) { row.push(cur); cur = ""; }
+        else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+        else if (c === "\r") { /* ignore */ }
+        else cur += c;
       }
     }
-    // آخر خلية إن وجدت
-    if (cur.length > 0 || row.length > 0) {
-      row.push(cur);
-      rows.push(row);
-    }
+    if (cur.length > 0 || row.length > 0) { row.push(cur); rows.push(row); }
     return rows;
   }
 
-  /**
-   * يحوّل CSV rows إلى كائنات بناءً على أول صف (Headers)
-   * - يتجاهل الأعمدة الفارغة أو التي تبدأ بـ Unnamed
-   */
+  // تحويل صفوف CSV إلى كائنات
   function rowsToObjects(rows) {
     if (!rows || !rows.length) return [];
     const headers = rows[0].map((h) => String(h || "").trim());
@@ -245,35 +178,25 @@
     return { objects, headers };
   }
 
-  /**
-   * تطبيع السجلات لحقول الويب الرئيسية الموحدة
-   * - يركّز على: Patient Code / Patient Name / Intervention / Department / Palliative Member
-   * - يبقي الحقول الأخرى بدون حذف (سيتم تجاهلها في GAS)
-   * - لو Outpatient و visitType = other(custom) سيستبدل القيمة
-   */
+  // تطبيع الحقول الأساسية للتطبيق
   function normalizeRecordsForApp(objects, { defaultDepartment = "", defaultMember = "", visitTypeField = "Visit Type", otherVisitField = "Visit Other" } = {}) {
     return objects.map((src) => {
       const rec = { ...src };
 
-      // أسماء الأعمدة المستهدفة (مرنة)
       const pCode = rec["Patient Code"] || rec["Code"] || "";
       const pName = rec["Patient Name"] || rec["Name"] || "";
       let intervention = rec["Intervention"] || rec["intervention"] || "";
       let department = rec["Department"] || rec["department"] || defaultDepartment || "";
       let member = rec["Palliative Member"] || rec["Palliative member"] || rec["Member"] || defaultMember || "";
 
-      // دعم Outpatient: Visit Type (OPC/Clinic consult/TR/P.Office/Other)
-      // استبدال Other بالنص الحرّ إذا موجود
+      // دعم Visit Type = other + نص حر
       const visitTypeRaw = rec[visitTypeField] || rec["visit type"] || rec["VisitType"] || "";
       const otherText = rec[otherVisitField] || rec["Other"] || rec["other"] || "";
       if (visitTypeRaw) {
         const lower = String(visitTypeRaw).toLowerCase();
-        if (lower === "other" && otherText) {
-          rec[visitTypeField] = otherText;
-        }
+        if (lower === "other" && otherText) rec[visitTypeField] = otherText;
       }
 
-      // ضمان الحقول الأساسية
       rec["Patient Code"] = pCode;
       rec["Patient Name"] = pName;
       rec["Intervention"] = intervention;
@@ -284,32 +207,17 @@
     });
   }
 
-  // ======================================================
-  // استيراد CSV (من نص أو ملف)
-  // ======================================================
-
-  /**
-   * استيراد CSV من نصّ خام (كما بعد قراءة الملف)
-   * - يكتشف النوع (Inpatient/Outpatient) للاستخدام لاحقًا
-   * - يطبّع الحقول المطلوبة للتطبيق
-   * - يرسل السجلات إلى GAS بدفعة واحدة
-   */
+  // استيراد CSV من نص خام
   async function importCsvText(csvText, { defaultDepartment = "", defaultMember = "" } = {}) {
     const rows = parseCsv(csvText);
     const { objects, headers } = rowsToObjects(rows);
     const templateType = detectTemplateType(headers);
-
-    // تطبيع
     const normalized = normalizeRecordsForApp(objects, { defaultDepartment, defaultMember });
-
-    // إرسال دفعة واحدة
     const res = await importRecords(normalized);
     return { res, count: normalized.length, templateType };
   }
 
-  /**
-   * استيراد CSV من ملف (File object من <input type="file">)
-   */
+  // استيراد CSV من ملف
   async function importCsvFile(file, { defaultDepartment = "", defaultMember = "" } = {}) {
     const csvText = await readFileAsText(file);
     return importCsvText(csvText, { defaultDepartment, defaultMember });
@@ -324,24 +232,12 @@
     });
   }
 
-  // ======================================================
-  // أدوات مساعدة
-  // ======================================================
-
-  /**
-   * تجميع سريع لإضافة عدة سجلات دفعة واحدة (يحوّلها إلى importRecords)
-   * - مفيد عند ترحيل بيانات Outpatient/ Inpatient بعد التعديل اليدوي من الواجهة
-   */
+  // أدوات إضافية
   async function addMany(records) {
-    if (!Array.isArray(records) || records.length === 0) {
-      return { status: "noop" };
-    }
+    if (!Array.isArray(records) || records.length === 0) return { status: "noop" };
     return importRecords(records);
   }
 
-  /**
-   * فحص صحة الاتصال بالـ GAS
-   */
   async function healthCheck() {
     try {
       const data = await getAllRecords({ force: true });
@@ -351,10 +247,7 @@
     }
   }
 
-  // ======================================================
-  // تصدير الواجهة العامة
-  // ======================================================
-
+  // تصدير الواجهة
   const API = {
     setGasUrl,
     getAllRecords,
@@ -367,7 +260,6 @@
     healthCheck,
   };
 
-  // إتاحة الواجهة في window.GAS
   global.GAS = API;
 
 })(window);
