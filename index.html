@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Palliative Care Monitor</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+
+<body>
+  <header>
+    <h1>نظام مراقبة الفريق التلطيفي</h1>
+    <button id="preferencesBtn">⚙️ الإعدادات</button>
+  </header>
+
+  <section id="summary">
+    <h2>إحصائيات اليوم</h2>
+    <div id="teamCounters"></div>
+  </section>
+
+  <section id="patientTableSection">
+    <div class="filters">
+      <select id="filterDepartment">
+        <option value="">كل الأقسام</option>
+      </select>
+      <select id="filterIntervention">
+        <option value="">كل التدخلات</option>
+        <option value="refill medication">Refill Medication</option>
+        <option value="reassessment/dose modification">Reassessment / Dose Modification</option>
+        <option value="new assessment/new patient">New Assessment / New Patient</option>
+      </select>
+      <select id="filterMember">
+        <option value="">كل الأعضاء</option>
+        <option value="جواد ابو صبحة">جواد ابو صبحة</option>
+        <option value="اصالة نوباني">اصالة نوباني</option>
+        <option value="امين دحدولان">امين دحدولان</option>
+      </select>
+      <input type="date" id="filterDate" />
+    </div>
+
+    <table id="patientTable">
+      <thead>
+        <tr>
+          <th>Patient Name</th>
+          <th>Patient Code</th>
+          <th>Intervention</th>
+          <th>Department</th>
+          <th>Palliative Member</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="importSection">
+    <h3>استيراد المرضى</h3>
+    <input type="file" id="csvImport" accept=".csv" />
+    <button id="importBtn">استيراد</button>
+  </section>
+
+  <footer>
+    <p>© 2025 Palliative Monitoring Tool | Designed for Palliative Care Team</p>
+  </footer>
+
+  <div id="notification" class="hidden"></div>
+
+  <script src="js/api-gas.js"></script>
+  <script src="js/app-core.js"></script>
+  <script src="js/ui-view.js"></script>
+  <script src="js/analytics.js"></script>
+</body>
+</html>
