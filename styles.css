@@ -1,0 +1,324 @@
+/* ==============
+   أساسيات عامة
+   ============== */
+:root {
+  --font: "Cairo", system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans Arabic", sans-serif;
+  --bg: #0b1220;
+  --card: #0f172a;
+  --muted: #8aa3b6;
+  --text: #ecfeff;
+  --accent: #7dd3fc;
+  --primary: #38bdf8;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --ring: #94a3b8;
+  --shadow: 0 10px 30px rgba(2,6,23,.35);
+  --radius: 16px;
+  --radius-sm: 12px;
+  --radius-xs: 10px;
+  --gap: 14px;
+  --speed: 240ms;           /* تُعدل من التفضيلات */
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --motion: slide;          /* slide | fade | glow */
+  --row-stripe: rgba(255,255,255,.03);
+}
+
+/* كثافة الواجهة */
+:root[data-density="compact"] {
+  --gap: 10px;
+  --radius: 12px;
+}
+
+/* ==============
+   ثيمات جاهزة
+   ============== */
+body[data-theme="ocean"] { --bg:#081019; --card:#0b1a2b; --text:#e6f6ff; --accent:#67e8f9; --primary:#0ea5e9; --ring:#0ea5e977; }
+body[data-theme="glow"] { --bg:#0b0b12; --card:#10101a; --text:#fbfbff; --accent:#b3fffd; --primary:#a78bfa; --ring:#a78bfa77; }
+body[data-theme="mint"] { --bg:#07140e; --card:#0f241a; --text:#ecfffa; --accent:#99ffd6; --primary:#10b981; --ring:#10b98177; }
+body[data-theme="rose"] { --bg:#190b12; --card:#2a0f19; --text:#ffe6f0; --accent:#ffc1d6; --primary:#f43f5e; --ring:#f43f5e77; }
+body[data-theme="down"] { --bg:#0f0f10; --card:#17181b; --text:#f3f5f7; --accent:#b9e0ff; --primary:#60a5fa; --ring:#60a5fa77; }
+body[data-theme="upper"]{ --bg:#0b0f07; --card:#11190c; --text:#f6fff0; --accent:#d6ff97; --primary:#84cc16; --ring:#84cc1677; }
+body[data-theme="dark"] { --bg:#0b0b0b; --card:#141414; --text:#f0f0f0; --accent:#d1d5db; --primary:#737373; --ring:#73737377; }
+body[data-theme="light-blue"]{ --bg:#061118; --card:#0e1d29; --text:#e6f6ff; --accent:#b3e8ff; --primary:#3b82f6; --ring:#3b82f677; }
+body[data-theme="dark-blue"]{ --bg:#050c16; --card:#0b1523; --text:#dff2ff; --accent:#8ed0ff; --primary:#2563eb; --ring:#2563eb77; }
+body[data-theme="tirkwaz"]{ --bg:#061312; --card:#0a1f1e; --text:#e7fffd; --accent:#98f5e1; --primary:#14b8a6; --ring:#14b8a677; }
+body[data-theme="gradient"]{
+  --bg: radial-gradient(1200px 600px at 80% -10%, #0ea5e9 0, transparent 50%), #0b1220;
+  --card:#0f172a; --text:#ecfeff; --accent:#67e8f9; --primary:#0ea5e9; --ring:#0ea5e977;
+}
+
+/* ==============
+   Reset مبسّط
+   ============== */
+*{ box-sizing: border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app{ max-width: 1200px; margin: 0 auto; padding: 18px; }
+
+/* ==============
+   توست/إشعار
+   ============== */
+.toast{
+  position: sticky;
+  top: 8px; z-index: 50;
+  padding: 10px 14px;
+  border: 1px solid var(--ring);
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.15));
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: var(--shadow);
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform var(--speed) var(--ease), opacity var(--speed) var(--ease);
+}
+.toast-hidden{ transform: translateY(-20px); opacity: 0; pointer-events:none; }
+#toast .btn-ghost{ margin-inline-start:auto; }
+
+/* ==============
+   رأس التطبيق
+   ============== */
+.app-header{
+  display:flex; align-items:center; justify-content:space-between;
+  gap: var(--gap); margin-bottom: 18px;
+}
+.brand{ display:flex; gap:12px; align-items:center; }
+.brand-icon{
+  width:40px; height:40px; border-radius:12px;
+  display:grid; place-items:center;
+  background: linear-gradient(135deg, var(--primary), transparent 60%);
+  color:#fff; font-size:18px; box-shadow: 0 0 28px rgba(14,165,233,.45);
+}
+.brand-title{ margin:0; font-size: 22px; letter-spacing:.3px; }
+.brand-sub{ font-size: 13px; color: var(--muted); }
+
+.header-actions{ display:flex; align-items:end; gap:10px; }
+.theme-switcher{ display:flex; flex-direction:column; gap:6px; min-width: 160px; }
+
+/* ==============
+   شريط الأدوات
+   ============== */
+.toolbar{
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
+  gap: var(--gap); margin: 12px 0 14px;
+  background: var(--card);
+  border:1px solid rgba(255,255,255,.06);
+  padding: 12px; border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.date-wrap{ display:flex; align-items:center; gap:10px; }
+.date-today{ padding:8px 10px; background: rgba(255,255,255,.04); border-radius: var(--radius-xs); }
+.muted{ color: var(--muted); }
+
+.import-actions{ display:flex; flex-wrap:wrap; align-items:center; gap: var(--gap); }
+.import-group{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.out-type{ display:flex; align-items:center; gap:8px; }
+
+/* ==============
+   عدّادات الفريق
+   ============== */
+.counters{
+  display:grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap);
+  margin: 10px 0 16px;
+}
+.counter-card{
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.12));
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  position: relative; overflow: hidden;
+}
+.counter-card.alt{ background: linear-gradient(180deg, rgba(34,197,94,.12), rgba(0,0,0,.12)); }
+.counter-title{ font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+.counter-num{ font-size: 34px; font-weight: 700; letter-spacing: .6px; }
+
+/* ==============
+   فلاتر
+   ============== */
+.filters{
+  background: var(--card);
+  border:1px solid rgba(255,255,255,.06);
+  padding: 12px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+}
+.filter-row{ display:grid; grid-template-columns: repeat(6, minmax(0,1fr)) auto auto; gap: var(--gap); align-items:end; }
+.filter-field{ display:flex; flex-direction:column; gap:6px; }
+.filter-actions{ display:flex; gap:8px; align-items:center; }
+
+/* ==============
+   جدول المرضى
+   ============== */
+.table-wrap{
+  background: var(--card);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+.table-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 12px; border-bottom:1px solid rgba(255,255,255,.06);
+}
+.table-title{ font-weight:600; }
+.table-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+.table-scroll{ overflow:auto; max-height: 60vh; }
+.table{
+  width:100%; border-collapse: separate; border-spacing:0;
+}
+.table thead th{
+  position: sticky; top: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,0));
+  backdrop-filter: blur(3px);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  font-weight: 600; text-align: start; padding: 10px;
+}
+.table tbody td{
+  padding: 10px; border-bottom: 1px dashed rgba(255,255,255,.06);
+}
+.table tbody tr:nth-child(odd){ background: var(--row-stripe); }
+.table tbody tr:hover{ background: rgba(255,255,255,.06); }
+
+.row-actions{ white-space: nowrap; }
+.btn-xs{ padding: 4px 8px; font-size: 12px; border-radius: 10px; }
+
+/* ==============
+   عناصر الإدخال
+   ============== */
+.label{ font-size: 12px; color: var(--muted); }
+.input, .select, .textarea{
+  width:100%; padding: 10px 12px; border-radius: var(--radius-xs);
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.04); color: var(--text);
+  outline: none;
+  transition: border var(--speed) var(--ease), box-shadow var(--speed) var(--ease), transform var(--speed) var(--ease);
+}
+.input:focus, .select:focus, .textarea:focus{
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 20%, transparent);
+}
+
+/* أزرار */
+.btn{
+  appearance:none; border:1px solid rgba(255,255,255,.1);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.16));
+  color: var(--text); padding: 10px 14px; border-radius: var(--radius-sm);
+  cursor:pointer; transition: transform var(--speed) var(--ease), box-shadow var(--speed) var(--ease), background var(--speed) var(--ease);
+}
+.btn:hover{ transform: translateY(-1px); box-shadow: var(--shadow); }
+.btn:active{ transform: translateY(0); }
+
+.btn-primary{ border-color: color-mix(in oklab, var(--primary) 40%, #000); background: linear-gradient(180deg, color-mix(in oklab, var(--primary) 45%, #000), rgba(0,0,0,.16)); }
+.btn-success{ border-color: color-mix(in oklab, var(--success) 40%, #000); background: linear-gradient(180deg, color-mix(in oklab, var(--success) 45%, #000), rgba(0,0,0,.16)); }
+.btn-danger{ border-color: color-mix(in oklab, var(--danger) 40%, #000); background: linear-gradient(180deg, color-mix(in oklab, var(--danger) 45%, #000), rgba(0,0,0,.16)); }
+.btn-accent{ border-color: color-mix(in oklab, var(--accent) 40%, #000); background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 45%, #000), rgba(0,0,0,.16)); }
+.btn-ghost{ background: transparent; border-color: transparent; color: var(--muted); }
+
+/* ==============
+   مودالات
+   ============== */
+.modal{
+  border: none; padding:0; margin:auto; inset:0;
+  background: transparent;
+}
+.modal[open]::backdrop{
+  background: rgba(0,0,0,.55);
+  animation: fade-in var(--speed) var(--ease) both;
+}
+.modal-card{
+  width: min(720px, 92dvw); max-height: 82dvh; overflow:auto;
+  background: var(--card); border:1px solid rgba(255,255,255,.1);
+  border-radius: 18px; box-shadow: var(--shadow);
+  transform-origin: center;
+  animation: var(--motion-in);
+}
+.modal-header, .modal-footer{ padding: 12px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.modal-footer{ border-bottom: none; border-top: 1px solid rgba(255,255,255,.06); display:flex; gap:8px; justify-content:flex-end; }
+.modal-body{ padding: 12px; display:grid; gap: var(--gap); }
+.grid-2{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field-col{ grid-column: 1 / -1; }
+.mt-2{ margin-top: 8px; }
+
+/* ==============
+   فوتر
+   ============== */
+.app-footer{
+  display:flex; justify-content:center; margin-top: 18px; color: var(--muted);
+}
+
+/* ==============
+   حركات/Transitions
+   ============== */
+.glow-pulse{
+  animation: glow 2.8s ease-in-out infinite;
+}
+@keyframes glow{
+  0%{ box-shadow: 0 0 8px rgba(14,165,233,.2), inset 0 0 0 rgba(255,255,255,0); }
+  50%{ box-shadow: 0 0 26px rgba(14,165,233,.55), inset 0 0 0 rgba(255,255,255,.02); }
+  100%{ box-shadow: 0 0 8px rgba(14,165,233,.2), inset 0 0 0 rgba(255,255,255,0); }
+}
+
+.row-enter{
+  animation: rowIn var(--speed) var(--ease) both;
+}
+@keyframes rowIn{
+  from{ transform: translateY(6px); opacity:0; }
+  to{ transform: translateY(0); opacity:1; }
+}
+
+@keyframes fadein{
+  from{ opacity: 0; transform: translateY(8px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slidein{
+  from{ opacity: 0; transform: translateY(10px) scale(.98); }
+  to{ opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes glowin{
+  from{ filter: brightness(.6); transform: scale(.98); opacity:0; }
+  to{ filter: brightness(1); transform: scale(1); opacity:1; }
+}
+
+/* يتم تبديل الحركة عبر CSS variables حسب تفضيل المستخدم */
+:root{ --motion-in: slidein var(--speed) var(--ease) both; }
+:root[data-motion="fade"]{ --motion-in: fadein var(--speed) var(--ease) both; }
+:root[data-motion="glow"]{ --motion-in: glowin var(--speed) var(--ease) both; }
+
+/* ==============
+   Utilities
+   ============== */
+.hidden{ display:none !important; }
+.toast-success{ border-color: color-mix(in oklab, var(--success) 40%, #000); }
+.toast-danger{ border-color: color-mix(in oklab, var(--danger) 40%, #000); }
+.toast-info{ border-color: color-mix(in oklab, var(--primary) 40%, #000); }
+
+/* تمرير محسّن */
+.table-scroll::-webkit-scrollbar{ height:10px; width:10px; }
+.table-scroll::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, var(--primary), transparent);
+  border-radius: 10px;
+}
+
+/* شاشات صغيرة */
+@media (max-width: 880px){
+  .counters{ grid-template-columns: repeat(2, 1fr); }
+  .filter-row{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid-2{ grid-template-columns: 1fr; }
+}
