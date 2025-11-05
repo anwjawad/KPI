@@ -48,7 +48,7 @@ export const DEFAULT_PREFERENCES = {
 };
 
 /** عنوان GAS الافتراضي (يمكن تعديله هنا قبل البناء/النشر) */
-export const DEFAULT_GAS_URL = "https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec";
+export const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbzDcsaxkGQE2Zd6D06JvfENaXWlSfwWSnbZQs5Q1KpyFLFLWx-_0rlBChXqQkEYP2sN-g/exec";
 
 /** السكيما القياسية لسجل مريض */
 export const PatientSchema = {
