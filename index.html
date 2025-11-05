@@ -2,72 +2,395 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Palliative Care Monitor</title>
-  <link rel="stylesheet" href="assets/styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Palliative Care Monitor • KPI2</title>
+  <meta name="theme-color" content="#0ea5e9" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 
-<body>
-  <header>
-    <h1>نظام مراقبة الفريق التلطيفي</h1>
-    <button id="preferencesBtn">⚙️ الإعدادات</button>
-  </header>
+<!--
+  ملاحظات مهمة:
+  - التيمات تُضبط عبر data-theme على <body>.
+  - سرعة/نوع الترانزشن رح تتعدل من preferences (تُخزَّن محلياً)، ويطبّقها app.js بتحديث CSS variables.
+  - الاتصال بـ GAS عبر JSONP رح يكون في app.js (ملف لاحق)، وGAS_URL الافتراضي يُحدّد في schema.js.
+-->
 
-  <section id="summary">
-    <h2>إحصائيات اليوم</h2>
-    <div id="teamCounters"></div>
-  </section>
-
-  <section id="patientTableSection">
-    <div class="filters">
-      <select id="filterDepartment">
-        <option value="">كل الأقسام</option>
-      </select>
-      <select id="filterIntervention">
-        <option value="">كل التدخلات</option>
-        <option value="refill medication">Refill Medication</option>
-        <option value="reassessment/dose modification">Reassessment / Dose Modification</option>
-        <option value="new assessment/new patient">New Assessment / New Patient</option>
-      </select>
-      <select id="filterMember">
-        <option value="">كل الأعضاء</option>
-        <option value="جواد ابو صبحة">جواد ابو صبحة</option>
-        <option value="اصالة نوباني">اصالة نوباني</option>
-        <option value="امين دحدولان">امين دحدولان</option>
-      </select>
-      <input type="date" id="filterDate" />
+<body data-theme="ocean">
+  <div id="app" class="app">
+    <!-- شريط الإشعار العام (بدء يوم جديد/أخطاء/نجاح) -->
+    <div id="toast" class="toast toast-hidden" role="status" aria-live="polite">
+      <span id="toast-text">—</span>
+      <button id="toast-close" class="btn btn-ghost" aria-label="إغلاق">×</button>
     </div>
 
-    <table id="patientTable">
-      <thead>
-        <tr>
-          <th>Patient Name</th>
-          <th>Patient Code</th>
-          <th>Intervention</th>
-          <th>Department</th>
-          <th>Palliative Member</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </section>
+    <!-- ترويسة -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon glow-pulse" aria-hidden="true">✦</div>
+        <div>
+          <h1 class="brand-title">Palliative Care Monitor</h1>
+          <div class="brand-sub">Team: جواد أبو صبحة • أصالة نوباني • أمين دحدولان</div>
+        </div>
+      </div>
 
-  <section id="importSection">
-    <h3>استيراد المرضى</h3>
-    <input type="file" id="csvImport" accept=".csv" />
-    <button id="importBtn">استيراد</button>
-  </section>
+      <div class="header-actions">
+        <div class="theme-switcher">
+          <label for="theme-select" class="label">الثيم</label>
+          <select id="theme-select" class="select">
+            <option value="ocean">ocean</option>
+            <option value="glow">glow</option>
+            <option value="mint">mint</option>
+            <option value="rose">rose</option>
+            <option value="down">down</option>
+            <option value="upper">upper</option>
+            <option value="dark">dark</option>
+            <option value="light-blue">light blue</option>
+            <option value="dark-blue">dark blue</option>
+            <option value="tirkwaz">tirkwaz</option>
+            <option value="gradient">gradient</option>
+          </select>
+        </div>
 
-  <footer>
-    <p>© 2025 Palliative Monitoring Tool | Designed for Palliative Care Team</p>
-  </footer>
+        <button id="btn-preferences" class="btn btn-primary" aria-haspopup="dialog">
+          ⚙️ التفضيلات
+        </button>
+      </div>
+    </header>
 
-  <div id="notification" class="hidden"></div>
+    <!-- شريط الأدوات العلوي -->
+    <section class="toolbar">
+      <div class="date-wrap">
+        <div class="date-today">
+          <span class="muted">اليوم:</span>
+          <strong id="today-label">—</strong>
+        </div>
+        <button id="btn-new-day" class="btn btn-success">
+          ⏳ بدء يوم جديد
+        </button>
+      </div>
 
-  <script src="js/api-gas.js"></script>
-  <script src="js/app-core.js"></script>
-  <script src="js/ui-view.js"></script>
-  <script src="js/analytics.js"></script>
+      <div class="import-actions">
+        <div class="import-group">
+          <button id="btn-add-manual" class="btn btn-accent">➕ إضافة مريض</button>
+          <button id="btn-import-out" class="btn">⬆️ استيراد Outpatient CSV</button>
+          <button id="btn-import-in" class="btn">⬆️ استيراد Inpatient CSV</button>
+          <a id="btn-download-template" class="btn btn-ghost" download href="#">
+            ⤓ تنزيل القالب
+          </a>
+        </div>
+
+        <div class="out-type">
+          <label class="label">نوع Outpatient</label>
+          <select id="out-type-select" class="select">
+            <option value="">—</option>
+            <option value="OPC">OPC</option>
+            <option value="Clinic consult">Clinic consult</option>
+            <option value="TR">TR</option>
+            <option value="P.Office">P.Office</option>
+            <option value="other">other</option>
+          </select>
+          <input id="out-type-other" class="input" type="text" placeholder="اكتب القسم عند اختيار other" />
+        </div>
+      </div>
+    </section>
+
+    <!-- عدّادات الفريق -->
+    <section class="counters">
+      <div class="counter-card">
+        <div class="counter-title">جواد أبو صبحة</div>
+        <div id="count-jawad" class="counter-num">0</div>
+      </div>
+      <div class="counter-card">
+        <div class="counter-title">أصالة نوباني</div>
+        <div id="count-asala" class="counter-num">0</div>
+      </div>
+      <div class="counter-card">
+        <div class="counter-title">أمين دحدولان</div>
+        <div id="count-amin" class="counter-num">0</div>
+      </div>
+      <div class="counter-card alt">
+        <div class="counter-title">إجمالي اليوم</div>
+        <div id="count-total" class="counter-num">0</div>
+      </div>
+    </section>
+
+    <!-- فلاتر -->
+    <section class="filters">
+      <div class="filter-row">
+        <div class="filter-field">
+          <label class="label">القسم</label>
+          <input id="filter-dept" class="input" type="text" placeholder="مثال: ICU / OPC ..." />
+        </div>
+        <div class="filter-field">
+          <label class="label">نوع التدخل</label>
+          <select id="filter-intervention" class="select">
+            <option value="">الكل</option>
+            <option value="refill medication">refill medication</option>
+            <option value="reassessment/dose modification">reassessment/dose modification</option>
+            <option value="new assessment/new patient">new assessment/new patient</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="label">عضو الرعاية التلطيفية</label>
+          <select id="filter-member" class="select">
+            <option value="">الكل</option>
+            <option value="جواد أبو صبحة">جواد أبو صبحة</option>
+            <option value="أصالة نوباني">أصالة نوباني</option>
+            <option value="أمين دحدولان">أمين دحدولان</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="label">اسم المريض</label>
+          <input id="filter-name" class="input" type="text" placeholder="بحث بالاسم" />
+        </div>
+        <div class="filter-field">
+          <label class="label">كود المريض</label>
+          <input id="filter-code" class="input" type="text" placeholder="بحث بالكود" />
+        </div>
+        <div class="filter-field">
+          <label class="label">التاريخ</label>
+          <input id="filter-date" class="input" type="date" />
+        </div>
+        <div class="filter-actions">
+          <button id="btn-apply-filters" class="btn btn-primary">تطبيق</button>
+          <button id="btn-clear-filters" class="btn btn-ghost">مسح</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- الجدول الدائم -->
+    <section class="table-wrap">
+      <div class="table-head">
+        <div class="table-title">سجل المرضى (لا يُحذف عند بدء يوم جديد)</div>
+        <div class="table-actions">
+          <button id="btn-export-weekly" class="btn">📆 تقرير أسبوعي</button>
+          <button id="btn-export-monthly" class="btn">🗓️ تقرير شهري</button>
+          <button id="btn-export-yearly" class="btn">🗃️ تقرير سنوي</button>
+          <button id="btn-sync" class="btn btn-success">⇅ مزامنة</button>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table id="patients-table" class="table">
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>الاسم</th>
+              <th>الكود</th>
+              <th>In/Out</th>
+              <th>Out Type</th>
+              <th>القسم</th>
+              <th>التدخل</th>
+              <th>عضو الرعاية</th>
+              <th>ملاحظات</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="patients-tbody">
+            <!-- يملأ ديناميكياً -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- نوافذ منبثقة -->
+    <!-- إضافة/تعديل مريض -->
+    <dialog id="modal-patient" class="modal">
+      <form id="form-patient" class="modal-card" method="dialog">
+        <header class="modal-header">
+          <h3 id="modal-patient-title">إضافة مريض</h3>
+          <button class="btn btn-ghost" type="button" data-close>×</button>
+        </header>
+
+        <div class="modal-body grid-2">
+          <div class="field">
+            <label class="label">التاريخ</label>
+            <input id="fld-date" type="date" class="input" required />
+          </div>
+
+          <div class="field">
+            <label class="label">الاسم</label>
+            <input id="fld-name" type="text" class="input" required />
+          </div>
+
+          <div class="field">
+            <label class="label">الكود</label>
+            <input id="fld-code" type="text" class="input" />
+          </div>
+
+          <div class="field">
+            <label class="label">In/Out</label>
+            <select id="fld-inout" class="select" required>
+              <option value="out">Out patient</option>
+              <option value="in">In patient</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="label">Out Type</label>
+            <select id="fld-outtype" class="select">
+              <option value="">—</option>
+              <option value="OPC">OPC</option>
+              <option value="Clinic consult">Clinic consult</option>
+              <option value="TR">TR</option>
+              <option value="P.Office">P.Office</option>
+              <option value="other">other</option>
+            </select>
+            <input id="fld-outtype-other" class="input mt-2" type="text" placeholder="قسم آخر..." />
+          </div>
+
+          <div class="field">
+            <label class="label">القسم</label>
+            <input id="fld-dept" type="text" class="input" placeholder="ICU / OPD / Ward ..." />
+          </div>
+
+          <div class="field">
+            <label class="label">التدخل</label>
+            <select id="fld-intervention" class="select" required>
+              <option value="refill medication">refill medication</option>
+              <option value="reassessment/dose modification">reassessment/dose modification</option>
+              <option value="new assessment/new patient">new assessment/new patient</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="label">عضو الرعاية</label>
+            <select id="fld-member" class="select" required>
+              <option value="جواد أبو صبحة">جواد أبو صبحة</option>
+              <option value="أصالة نوباني">أصالة نوباني</option>
+              <option value="أمين دحدولان">أمين دحدولان</option>
+            </select>
+          </div>
+
+          <div class="field field-col">
+            <label class="label">ملاحظات</label>
+            <textarea id="fld-notes" class="textarea" rows="3" placeholder="..."></textarea>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button class="btn btn-primary" id="btn-save-patient" type="submit">حفظ</button>
+          <button class="btn btn-ghost" type="button" data-close>إلغاء</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <!-- استيراد CSV -->
+    <dialog id="modal-import" class="modal">
+      <form id="form-import" class="modal-card" method="dialog" enctype="multipart/form-data">
+        <header class="modal-header">
+          <h3 id="modal-import-title">استيراد CSV</h3>
+          <button class="btn btn-ghost" type="button" data-close>×</button>
+        </header>
+        <div class="modal-body">
+          <div class="field">
+            <label class="label">اختر ملف CSV</label>
+            <input id="fld-file" class="input" type="file" accept=".csv,text/csv" required />
+          </div>
+          <p class="muted">سيتم تجاهل الأعمدة الفارغة تلقائياً عند التعبئة.</p>
+          <div class="field">
+            <label class="label">تطبيق عضو الرعاية على كل المرضى (اختياري)</label>
+            <select id="fld-bulk-member" class="select">
+              <option value="">— لا شيء —</option>
+              <option value="جواد أبو صبحة">جواد أبو صبحة</option>
+              <option value="أصالة نوباني">أصالة نوباني</option>
+              <option value="أمين دحدولان">أمين دحدولان</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label">تطبيق القسم على كل المرضى (اختياري)</label>
+            <input id="fld-bulk-dept" class="input" type="text" placeholder="ICU / Ward / OPC ..." />
+          </div>
+        </div>
+        <footer class="modal-footer">
+          <button id="btn-import-submit" class="btn btn-primary" type="submit">استيراد</button>
+          <button class="btn btn-ghost" type="button" data-close>إلغاء</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <!-- التفضيلات -->
+    <dialog id="modal-preferences" class="modal">
+      <form id="form-preferences" class="modal-card" method="dialog">
+        <header class="modal-header">
+          <h3>التفضيلات</h3>
+          <button class="btn btn-ghost" type="button" data-close>×</button>
+        </header>
+
+        <div class="modal-body grid-2">
+          <div class="field">
+            <label class="label">سرعة الحركات (ms)</label>
+            <input id="pref-speed" class="input" type="number" min="80" max="2000" step="20" value="240" />
+          </div>
+
+          <div class="field">
+            <label class="label">نوع الحركة الافتراضي</label>
+            <select id="pref-motion" class="select">
+              <option value="slide">slide</option>
+              <option value="fade">fade</option>
+              <option value="glow">glow</option>
+            </select>
+          </div>
+
+          <div class="field field-col">
+            <label class="label">Google Apps Script URL (اختياري الآن)</label>
+            <input id="pref-gas-url" class="input" type="url" placeholder="https://script.google.com/macros/s/XXXXX/exec" />
+            <p class="muted">يتم وضع Default في schema.js — يمكنك تجاوزه هنا.</p>
+          </div>
+
+          <div class="field">
+            <label class="label">حفظ تلقائي إلى Google Sheets</label>
+            <select id="pref-auto-sync" class="select">
+              <option value="on">تشغيل</option>
+              <option value="off">إيقاف</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="label">وضع الواجهة</label>
+            <select id="pref-ui-density" class="select">
+              <option value="cozy">مريح</option>
+              <option value="compact">مضغوط</option>
+            </select>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button class="btn btn-primary" id="btn-save-preferences" type="submit">حفظ</button>
+          <button class="btn btn-ghost" type="button" data-close>إلغاء</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <!-- قوالب مخفية (للاستعمال عبر JS) -->
+    <template id="row-template">
+      <tr class="row-enter">
+        <td data-col="date"></td>
+        <td data-col="name"></td>
+        <td data-col="code"></td>
+        <td data-col="inout"></td>
+        <td data-col="outtype"></td>
+        <td data-col="dept"></td>
+        <td data-col="intervention"></td>
+        <td data-col="member"></td>
+        <td data-col="notes"></td>
+        <td class="row-actions">
+          <button class="btn btn-xs btn-ghost" data-action="edit">تعديل</button>
+          <button class="btn btn-xs btn-danger" data-action="delete">حذف</button>
+        </td>
+      </tr>
+    </template>
+
+    <footer class="app-footer">
+      <small>© KPI2 • Web App runs static (GitHub Pages) • JSONP مع GAS لتفادي CORS</small>
+    </footer>
+  </div>
+
+  <!-- تحميل السكربتات -->
+  <script src="./schema.js" defer></script>
+  <script src="./app.js" defer></script>
 </body>
 </html>
