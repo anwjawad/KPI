@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -11,22 +11,15 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 
-<!--
-  ملاحظات مهمة:
-  - التيمات تُضبط عبر data-theme على <body>.
-  - سرعة/نوع الترانزشن رح تتعدل من preferences (تُخزَّن محلياً)، ويطبّقها app.js بتحديث CSS variables.
-  - الاتصال بـ GAS عبر JSONP رح يكون في app.js (ملف لاحق)، وGAS_URL الافتراضي يُحدّد في schema.js.
--->
-
 <body data-theme="ocean">
   <div id="app" class="app">
-    <!-- شريط الإشعار العام (بدء يوم جديد/أخطاء/نجاح) -->
+    <!-- Global toast/notification -->
     <div id="toast" class="toast toast-hidden" role="status" aria-live="polite">
       <span id="toast-text">—</span>
-      <button id="toast-close" class="btn btn-ghost" aria-label="إغلاق">×</button>
+      <button id="toast-close" class="btn btn-ghost" aria-label="Close">×</button>
     </div>
 
-    <!-- ترويسة -->
+    <!-- Header -->
     <header class="app-header">
       <div class="brand">
         <div class="brand-icon glow-pulse" aria-hidden="true">✦</div>
@@ -38,7 +31,7 @@
 
       <div class="header-actions">
         <div class="theme-switcher">
-          <label for="theme-select" class="label">الثيم</label>
+          <label for="theme-select" class="label">Theme</label>
           <select id="theme-select" class="select">
             <option value="ocean">ocean</option>
             <option value="glow">glow</option>
@@ -55,35 +48,36 @@
         </div>
 
         <button id="btn-preferences" class="btn btn-primary" aria-haspopup="dialog">
-          ⚙️ التفضيلات
+          ⚙️ Preferences
         </button>
       </div>
     </header>
 
-    <!-- شريط الأدوات العلوي -->
+    <!-- Top toolbar -->
     <section class="toolbar">
       <div class="date-wrap">
         <div class="date-today">
-          <span class="muted">اليوم:</span>
+          <span class="muted">Today:</span>
           <strong id="today-label">—</strong>
         </div>
         <button id="btn-new-day" class="btn btn-success">
-          ⏳ بدء يوم جديد
+          ⏳ Start New Day
         </button>
       </div>
 
       <div class="import-actions">
         <div class="import-group">
-          <button id="btn-add-manual" class="btn btn-accent">➕ إضافة مريض</button>
-          <button id="btn-import-out" class="btn">⬆️ استيراد Outpatient CSV</button>
-          <button id="btn-import-in" class="btn">⬆️ استيراد Inpatient CSV</button>
+          <!-- Emphasized Add Patient button (visual boost will be in styles.css) -->
+          <button id="btn-add-manual" class="btn btn-accent btn-cta">➕ Add Patient</button>
+          <button id="btn-import-out" class="btn">⬆️ Import Outpatient CSV</button>
+          <button id="btn-import-in" class="btn">⬆️ Import Inpatient CSV</button>
           <a id="btn-download-template" class="btn btn-ghost" download href="#">
-            ⤓ تنزيل القالب
+            ⤓ Download Template
           </a>
         </div>
 
         <div class="out-type">
-          <label class="label">نوع Outpatient</label>
+          <label class="label">Outpatient Type</label>
           <select id="out-type-select" class="select">
             <option value="">—</option>
             <option value="OPC">OPC</option>
@@ -92,12 +86,12 @@
             <option value="P.Office">P.Office</option>
             <option value="other">other</option>
           </select>
-          <input id="out-type-other" class="input" type="text" placeholder="اكتب القسم عند اختيار other" />
+          <input id="out-type-other" class="input" type="text" placeholder="Type when selecting other" />
         </div>
       </div>
     </section>
 
-    <!-- عدّادات الفريق -->
+    <!-- Team counters -->
     <section class="counters">
       <div class="counter-card">
         <div class="counter-title">جواد أبو صبحة</div>
@@ -112,64 +106,64 @@
         <div id="count-amin" class="counter-num">0</div>
       </div>
       <div class="counter-card alt">
-        <div class="counter-title">إجمالي اليوم</div>
+        <div class="counter-title">Total Today</div>
         <div id="count-total" class="counter-num">0</div>
       </div>
     </section>
 
-    <!-- فلاتر -->
+    <!-- Filters -->
     <section class="filters">
       <div class="filter-row">
         <div class="filter-field">
-          <label class="label">القسم</label>
-          <input id="filter-dept" class="input" type="text" placeholder="مثال: ICU / OPC ..." />
+          <label class="label">Department</label>
+          <input id="filter-dept" class="input" type="text" placeholder="e.g., ICU / OPC ..." />
         </div>
         <div class="filter-field">
-          <label class="label">نوع التدخل</label>
+          <label class="label">Intervention</label>
           <select id="filter-intervention" class="select">
-            <option value="">الكل</option>
+            <option value="">All</option>
             <option value="refill medication">refill medication</option>
             <option value="reassessment/dose modification">reassessment/dose modification</option>
             <option value="new assessment/new patient">new assessment/new patient</option>
           </select>
         </div>
         <div class="filter-field">
-          <label class="label">عضو الرعاية التلطيفية</label>
+          <label class="label">Palliative Member</label>
           <select id="filter-member" class="select">
-            <option value="">الكل</option>
+            <option value="">All</option>
             <option value="جواد أبو صبحة">جواد أبو صبحة</option>
             <option value="أصالة نوباني">أصالة نوباني</option>
             <option value="أمين دحدولان">أمين دحدولان</option>
           </select>
         </div>
         <div class="filter-field">
-          <label class="label">اسم المريض</label>
-          <input id="filter-name" class="input" type="text" placeholder="بحث بالاسم" />
+          <label class="label">Patient Name</label>
+          <input id="filter-name" class="input" type="text" placeholder="Search by name" />
         </div>
         <div class="filter-field">
-          <label class="label">كود المريض</label>
-          <input id="filter-code" class="input" type="text" placeholder="بحث بالكود" />
+          <label class="label">Patient Code</label>
+          <input id="filter-code" class="input" type="text" placeholder="Search by code" />
         </div>
         <div class="filter-field">
-          <label class="label">التاريخ</label>
+          <label class="label">Date</label>
           <input id="filter-date" class="input" type="date" />
         </div>
         <div class="filter-actions">
-          <button id="btn-apply-filters" class="btn btn-primary">تطبيق</button>
-          <button id="btn-clear-filters" class="btn btn-ghost">مسح</button>
+          <button id="btn-apply-filters" class="btn btn-primary">Apply</button>
+          <button id="btn-clear-filters" class="btn btn-ghost">Clear</button>
         </div>
       </div>
     </section>
 
-    <!-- الجدول الدائم -->
+    <!-- Persistent table -->
     <section class="table-wrap">
       <div class="table-head">
-        <div class="table-title">سجل المرضى (لا يُحذف عند بدء يوم جديد)</div>
+        <div class="table-title">Patient Records (persisted; New Day does not clear)</div>
         <div class="table-actions">
-          <button id="btn-export-weekly" class="btn">📆 تقرير أسبوعي</button>
-          <button id="btn-export-monthly" class="btn">🗓️ تقرير شهري</button>
-          <button id="btn-export-yearly" class="btn">🗃️ تقرير سنوي</button>
-          <button id="btn-sync" class="btn btn-success">⇅ مزامنة</button>
+          <button id="btn-export-weekly" class="btn">📆 Weekly Report</button>
+          <button id="btn-export-monthly" class="btn">🗓️ Monthly Report</button>
+          <button id="btn-export-yearly" class="btn">🗃️ Yearly Report</button>
+          <button id="btn-sync" class="btn btn-success">⇅ Sync</button>
         </div>
       </div>
 
@@ -177,47 +171,49 @@
         <table id="patients-table" class="table">
           <thead>
             <tr>
-              <th>التاريخ</th>
-              <th>الاسم</th>
-              <th>الكود</th>
+              <th>Date</th>
+              <th>Name</th>
+              <th>Code</th>
               <th>In/Out</th>
               <th>Out Type</th>
-              <th>القسم</th>
-              <th>التدخل</th>
-              <th>عضو الرعاية</th>
-              <th>ملاحظات</th>
-              <th>إجراءات</th>
+              <th>Department</th>
+              <th>Intervention</th>
+              <th>Palliative Member</th>
+              <th>Response Time</th>
+              <th>Delay Reason</th>
+              <th>Notes</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="patients-tbody">
-            <!-- يملأ ديناميكياً -->
+            <!-- filled dynamically -->
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- نوافذ منبثقة -->
-    <!-- إضافة/تعديل مريض -->
+    <!-- Modals -->
+    <!-- Add/Edit Patient -->
     <dialog id="modal-patient" class="modal">
       <form id="form-patient" class="modal-card" method="dialog">
         <header class="modal-header">
-          <h3 id="modal-patient-title">إضافة مريض</h3>
+          <h3 id="modal-patient-title">Add Patient</h3>
           <button class="btn btn-ghost" type="button" data-close>×</button>
         </header>
 
         <div class="modal-body grid-2">
           <div class="field">
-            <label class="label">التاريخ</label>
+            <label class="label">Date</label>
             <input id="fld-date" type="date" class="input" required />
           </div>
 
           <div class="field">
-            <label class="label">الاسم</label>
+            <label class="label">Name</label>
             <input id="fld-name" type="text" class="input" required />
           </div>
 
           <div class="field">
-            <label class="label">الكود</label>
+            <label class="label">Code</label>
             <input id="fld-code" type="text" class="input" />
           </div>
 
@@ -239,16 +235,16 @@
               <option value="P.Office">P.Office</option>
               <option value="other">other</option>
             </select>
-            <input id="fld-outtype-other" class="input mt-2" type="text" placeholder="قسم آخر..." />
+            <input id="fld-outtype-other" class="input mt-2 hidden" type="text" placeholder="Other department..." />
           </div>
 
           <div class="field">
-            <label class="label">القسم</label>
+            <label class="label">Department</label>
             <input id="fld-dept" type="text" class="input" placeholder="ICU / OPD / Ward ..." />
           </div>
 
           <div class="field">
-            <label class="label">التدخل</label>
+            <label class="label">Intervention</label>
             <select id="fld-intervention" class="select" required>
               <option value="refill medication">refill medication</option>
               <option value="reassessment/dose modification">reassessment/dose modification</option>
@@ -257,7 +253,7 @@
           </div>
 
           <div class="field">
-            <label class="label">عضو الرعاية</label>
+            <label class="label">Palliative Member</label>
             <select id="fld-member" class="select" required>
               <option value="جواد أبو صبحة">جواد أبو صبحة</option>
               <option value="أصالة نوباني">أصالة نوباني</option>
@@ -265,69 +261,84 @@
             </select>
           </div>
 
+          <!-- New: Response Time + conditional Delay Reason -->
+          <div class="field">
+            <label class="label">Response Time</label>
+            <select id="fld-response-time" class="select" required>
+              <option value="within half hour">within half hour</option>
+              <option value="within hour">within hour</option>
+              <option value="more than hour">more than hour</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="label">Delay Reason (shown if more than hour)</label>
+            <input id="fld-delay-reason" type="text" class="input hidden" placeholder="Explain reason for delay..." />
+          </div>
+
           <div class="field field-col">
-            <label class="label">ملاحظات</label>
+            <label class="label">Notes</label>
             <textarea id="fld-notes" class="textarea" rows="3" placeholder="..."></textarea>
           </div>
         </div>
 
         <footer class="modal-footer">
-          <button class="btn btn-primary" id="btn-save-patient" type="submit">حفظ</button>
-          <button class="btn btn-ghost" type="button" data-close>إلغاء</button>
+          <button class="btn btn-primary" id="btn-save-patient" type="submit">Save</button>
+          <button class="btn btn-ghost" type="button" data-close>Cancel</button>
         </footer>
       </form>
     </dialog>
 
-    <!-- استيراد CSV -->
+    <!-- Import CSV -->
     <dialog id="modal-import" class="modal">
       <form id="form-import" class="modal-card" method="dialog" enctype="multipart/form-data">
         <header class="modal-header">
-          <h3 id="modal-import-title">استيراد CSV</h3>
+          <h3 id="modal-import-title">Import CSV</h3>
           <button class="btn btn-ghost" type="button" data-close>×</button>
         </header>
         <div class="modal-body">
           <div class="field">
-            <label class="label">اختر ملف CSV</label>
+            <label class="label">Choose CSV file</label>
             <input id="fld-file" class="input" type="file" accept=".csv,text/csv" required />
           </div>
-          <p class="muted">سيتم تجاهل الأعمدة الفارغة تلقائياً عند التعبئة.</p>
+          <p class="muted">Empty columns will be ignored automatically.</p>
           <div class="field">
-            <label class="label">تطبيق عضو الرعاية على كل المرضى (اختياري)</label>
+            <label class="label">Apply Palliative Member to all (optional)</label>
             <select id="fld-bulk-member" class="select">
-              <option value="">— لا شيء —</option>
+              <option value="">— None —</option>
               <option value="جواد أبو صبحة">جواد أبو صبحة</option>
               <option value="أصالة نوباني">أصالة نوباني</option>
               <option value="أمين دحدولان">أمين دحدولان</option>
             </select>
           </div>
           <div class="field">
-            <label class="label">تطبيق القسم على كل المرضى (اختياري)</label>
+            <label class="label">Apply Department to all (optional)</label>
             <input id="fld-bulk-dept" class="input" type="text" placeholder="ICU / Ward / OPC ..." />
           </div>
         </div>
         <footer class="modal-footer">
-          <button id="btn-import-submit" class="btn btn-primary" type="submit">استيراد</button>
-          <button class="btn btn-ghost" type="button" data-close>إلغاء</button>
+          <button id="btn-import-submit" class="btn btn-primary" type="submit">Import</button>
+          <button class="btn btn-ghost" type="button" data-close>Cancel</button>
         </footer>
       </form>
     </dialog>
 
-    <!-- التفضيلات -->
+    <!-- Preferences -->
     <dialog id="modal-preferences" class="modal">
       <form id="form-preferences" class="modal-card" method="dialog">
         <header class="modal-header">
-          <h3>التفضيلات</h3>
+          <h3>Preferences</h3>
           <button class="btn btn-ghost" type="button" data-close>×</button>
         </header>
 
         <div class="modal-body grid-2">
           <div class="field">
-            <label class="label">سرعة الحركات (ms)</label>
+            <label class="label">Animation speed (ms)</label>
             <input id="pref-speed" class="input" type="number" min="80" max="2000" step="20" value="240" />
           </div>
 
           <div class="field">
-            <label class="label">نوع الحركة الافتراضي</label>
+            <label class="label">Default transition</label>
             <select id="pref-motion" class="select">
               <option value="slide">slide</option>
               <option value="fade">fade</option>
@@ -336,36 +347,36 @@
           </div>
 
           <div class="field field-col">
-            <label class="label">Google Apps Script URL (اختياري الآن)</label>
+            <label class="label">Google Apps Script URL (optional)</label>
             <input id="pref-gas-url" class="input" type="url" placeholder="https://script.google.com/macros/s/XXXXX/exec" />
-            <p class="muted">يتم وضع Default في schema.js — يمكنك تجاوزه هنا.</p>
+            <p class="muted">Default is set in schema.js — you can override it here.</p>
           </div>
 
           <div class="field">
-            <label class="label">حفظ تلقائي إلى Google Sheets</label>
+            <label class="label">Auto sync to Google Sheets</label>
             <select id="pref-auto-sync" class="select">
-              <option value="on">تشغيل</option>
-              <option value="off">إيقاف</option>
+              <option value="on">On</option>
+              <option value="off">Off</option>
             </select>
           </div>
 
           <div class="field">
-            <label class="label">وضع الواجهة</label>
+            <label class="label">UI density</label>
             <select id="pref-ui-density" class="select">
-              <option value="cozy">مريح</option>
-              <option value="compact">مضغوط</option>
+              <option value="cozy">Cozy</option>
+              <option value="compact">Compact</option>
             </select>
           </div>
         </div>
 
         <footer class="modal-footer">
-          <button class="btn btn-primary" id="btn-save-preferences" type="submit">حفظ</button>
-          <button class="btn btn-ghost" type="button" data-close>إلغاء</button>
+          <button class="btn btn-primary" id="btn-save-preferences" type="submit">Save</button>
+          <button class="btn btn-ghost" type="button" data-close>Cancel</button>
         </footer>
       </form>
     </dialog>
 
-    <!-- قوالب مخفية (للاستعمال عبر JS) -->
+    <!-- Hidden template(s) -->
     <template id="row-template">
       <tr class="row-enter">
         <td data-col="date"></td>
@@ -376,24 +387,47 @@
         <td data-col="dept"></td>
         <td data-col="intervention"></td>
         <td data-col="member"></td>
+        <td data-col="response_time"></td>
+        <td data-col="delay_reason"></td>
         <td data-col="notes"></td>
         <td class="row-actions">
-          <button class="btn btn-xs btn-ghost" data-action="edit">تعديل</button>
-          <button class="btn btn-xs btn-danger" data-action="delete">حذف</button>
+          <button class="btn btn-xs btn-ghost" data-action="edit">Edit</button>
+          <button class="btn btn-xs btn-danger" data-action="delete">Delete</button>
         </td>
       </tr>
     </template>
 
     <footer class="app-footer">
-      <small>© KPI2 • Web App runs static (GitHub Pages) • JSONP مع GAS لتفادي CORS</small>
+      <small>© KPI2 • Web App runs static (GitHub Pages) • JSONP with GAS to avoid CORS</small>
     </footer>
   </div>
 
-  <!-- تحميل السكربتات -->
-
+  <!-- Scripts -->
   <script type="module" src="./app.js"></script>
-<script type="module" src="./schema.js"></script>
-<script type="module" src="./analytics.js"></script>
+  <script type="module" src="./schema.js"></script>
+  <script type="module" src="./analytics.js"></script>
 
+  <script>
+    // Small inline handler to toggle Delay Reason visibility based on Response Time (UI only; full logic in app.js will also enforce)
+    document.addEventListener('DOMContentLoaded', () => {
+      const sel = document.getElementById('fld-response-time');
+      const reason = document.getElementById('fld-delay-reason');
+      if (sel && reason) {
+        const update = () => {
+          if (sel.value === 'more than hour') reason.classList.remove('hidden');
+          else { reason.classList.add('hidden'); reason.value = ''; }
+        };
+        sel.addEventListener('change', update);
+        update();
+      }
+      const outSel = document.getElementById('fld-outtype');
+      const outOther = document.getElementById('fld-outtype-other');
+      if (outSel && outOther) {
+        const upd = () => outOther.classList.toggle('hidden', outSel.value !== 'other');
+        outSel.addEventListener('change', upd);
+        upd();
+      }
+    });
+  </script>
 </body>
 </html>
