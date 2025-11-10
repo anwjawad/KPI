@@ -1,12 +1,14 @@
 /* =========================================================
-   js/ui-view.js
-   العرض، عناصر DOM، الإشعارات، الفلاتر، الاستيراد، التفضيلات
+   js/ui-view.js (EN updated)
+   View layer: DOM, notifications, filters, import, preferences
+   - Compatible with App (app-core.js) facade
+   - Renders new fields: response_time, delay_reason
    ========================================================= */
 
 (function (global) {
   "use strict";
 
-  // عناصر DOM
+  // DOM elements
   const els = {
     tableBody: null,
     filterDepartment: null,
@@ -21,7 +23,7 @@
   };
 
   // ------------------------------------------------------
-  // أدوات DOM مساعدة
+  // DOM helpers
   // ------------------------------------------------------
   function qs(sel) { return document.querySelector(sel); }
   function ce(tag, cls) {
@@ -31,7 +33,7 @@
   }
 
   // ------------------------------------------------------
-  // إشعارات
+  // Notifications
   // ------------------------------------------------------
   function notify(msg, type = "info") {
     if (!els.notification) return;
@@ -39,7 +41,7 @@
     els.notification.classList.remove("hidden", "error", "info", "success");
     els.notification.classList.add(type === "error" ? "error" : (type === "success" ? "success" : "info"));
 
-    // تأثير بسيط + إخفاء تلقائي
+    // Fade-out effect
     els.notification.style.opacity = "1";
     setTimeout(() => {
       els.notification.style.opacity = "0";
@@ -48,48 +50,49 @@
   }
 
   // ------------------------------------------------------
-  // تهيئة عناصر DOM والربط
+  // Init & bindings
   // ------------------------------------------------------
   function initDom() {
-    els.tableBody = qs("#patientTable tbody");
-    els.filterDepartment = qs("#filterDepartment");
-    els.filterIntervention = qs("#filterIntervention");
-    els.filterMember = qs("#filterMember");
-    els.filterDate = qs("#filterDate");
+    // Note: these IDs are for the legacy/alt UI. They are optional in the new layout.
+    els.tableBody = qs("#patientTable tbody") || qs("#patients-tbody");
+    els.filterDepartment = qs("#filterDepartment") || qs("#filter-dept");
+    els.filterIntervention = qs("#filterIntervention") || qs("#filter-intervention");
+    els.filterMember = qs("#filterMember") || qs("#filter-member");
+    els.filterDate = qs("#filterDate") || qs("#filter-date");
     els.teamCounters = qs("#teamCounters");
-    els.csvInput = qs("#csvImport");
-    els.importBtn = qs("#importBtn");
-    els.preferencesBtn = qs("#preferencesBtn");
-    els.notification = qs("#notification");
+    els.csvInput = qs("#csvImport") || qs("#fld-file");
+    els.importBtn = qs("#importBtn") || qs("#btn-import-submit");
+    els.preferencesBtn = qs("#preferencesBtn") || qs("#btn-preferences");
+    els.notification = qs("#notification") || qs("#toast"); // fallback to global toast
 
-    // فلاتر
-    els.filterDepartment.addEventListener("change", (e) => App.setFilter("department", e.target.value));
-    els.filterIntervention.addEventListener("change", (e) => App.setFilter("intervention", e.target.value));
-    els.filterMember.addEventListener("change", (e) => App.setFilter("member", e.target.value));
-    els.filterDate.addEventListener("change", (e) => App.setFilter("date", e.target.value));
+    // Filters
+    if (els.filterDepartment) els.filterDepartment.addEventListener("change", (e) => App.setFilter("department", e.target.value));
+    if (els.filterIntervention) els.filterIntervention.addEventListener("change", (e) => App.setFilter("intervention", e.target.value));
+    if (els.filterMember) els.filterMember.addEventListener("change", (e) => App.setFilter("member", e.target.value));
+    if (els.filterDate) els.filterDate.addEventListener("change", (e) => App.setFilter("date", e.target.value));
 
-    // استيراد
-    els.importBtn.addEventListener("click", onImportClick);
+    // Import
+    if (els.importBtn) els.importBtn.addEventListener("click", onImportClick);
 
-    // تفضيلات
-    els.preferencesBtn.addEventListener("click", openPreferences);
+    // Preferences (optional entry point for legacy UI)
+    if (els.preferencesBtn) els.preferencesBtn.addEventListener("click", openPreferences);
   }
 
   // ------------------------------------------------------
-  // تعبئة خيارات الفلاتر ديناميكيًا
+  // Populate filter options dynamically
   // ------------------------------------------------------
   function populateFilters({ departments = [], members = [], interventions = [] }) {
     // department
-    fillSelect(els.filterDepartment, [""].concat(departments), (v) => v || "كل الأقسام");
+    fillSelect(els.filterDepartment, [""].concat(departments), (v) => v || "All departments");
 
-    // intervention (ثابتة مبدئيًا لكن نضمنها هنا)
-    if (interventions && interventions.length) {
-      fillSelect(els.filterIntervention, [""].concat(interventions), (v) => v || "كل التدخلات");
+    // interventions
+    if (els.filterIntervention && interventions && interventions.length) {
+      fillSelect(els.filterIntervention, [""].concat(interventions), (v) => v || "All interventions");
     }
 
     // members
-    if (members && members.length) {
-      fillSelect(els.filterMember, [""].concat(members), (v) => v || "كل الأعضاء");
+    if (els.filterMember && members && members.length) {
+      fillSelect(els.filterMember, [""].concat(members), (v) => v || "All members");
     }
   }
 
@@ -103,7 +106,7 @@
       opt.textContent = labelFn ? labelFn(val) : val;
       selectEl.appendChild(opt);
     });
-    // الحفاظ على الاختيار إن أمكن
+    // keep previous selection if possible
     if ([...selectEl.options].some((o) => o.value === current)) {
       selectEl.value = current;
     } else if (selectEl.options.length) {
@@ -112,7 +115,7 @@
   }
 
   // ------------------------------------------------------
-  // رسم الجدول
+  // Render table (supports both legacy table and new one)
   // ------------------------------------------------------
   function renderTable(list) {
     if (!els.tableBody) return;
@@ -120,23 +123,29 @@
 
     (list || []).forEach((r) => {
       const tr = ce("tr", "row");
-      const tds = [
-        r["Patient Name"] || "",
-        r["Patient Code"] || "",
-        r["Intervention"] || "",
-        r["Department"] || "",
-        r["Palliative Member"] || "",
-        r["Date"] || "",
+      // Support both schemas (legacy headings vs canonical keys)
+      const cells = [
+        r["Patient Name"] ?? r.name ?? "",
+        r["Patient Code"] ?? r.code ?? "",
+        r["Intervention"] ?? r.intervention ?? "",
+        r["Department"] ?? r.dept ?? "",
+        r["Palliative Member"] ?? r.member ?? "",
+        r["Date"] ?? r.date ?? "",
+        // New fields (show at the end for legacy table)
+        r["response_time"] ?? r.response_time ?? "",
+        r["delay_reason"] ?? r.delay_reason ?? "",
+        r["notes"] ?? r.notes ?? "",
       ];
-      tds.forEach((txt) => {
+
+      cells.forEach((txt) => {
         const td = ce("td");
-        td.textContent = txt;
+        td.textContent = String(txt || "");
         tr.appendChild(td);
       });
       els.tableBody.appendChild(tr);
     });
 
-    // تأثير بسيط (fade-in)
+    // Subtle fade-in
     try {
       const rows = els.tableBody.querySelectorAll("tr");
       rows.forEach((row, i) => {
@@ -152,7 +161,7 @@
   }
 
   // ------------------------------------------------------
-  // عدّادات الفريق في أعلى الصفحة
+  // Team counters (simple cards container if present)
   // ------------------------------------------------------
   function renderCounters(counterMap) {
     if (!els.teamCounters) return;
@@ -171,54 +180,75 @@
   }
 
   // ------------------------------------------------------
-  // استيراد CSV
+  // Import CSV (legacy UI path)
   // ------------------------------------------------------
   async function onImportClick() {
     const file = els.csvInput && els.csvInput.files && els.csvInput.files[0];
     if (!file) {
-      notify("اختر ملف CSV أولاً.", "error");
+      notify("Choose a CSV file first.", "error");
       return;
     }
 
-    // نافذة سريعة لتعيين قسم افتراضي وعضو افتراضي (اختياري)
+    // Quick defaults modal (optional)
     const defaults = await quickDefaultsPrompt();
     try {
       await App.importCsvFile(file, defaults);
-      notify("تم الاستيراد بنجاح.", "success");
+      notify("Imported successfully.", "success");
     } catch (e) {
       console.error(e);
-      notify("فشل الاستيراد. تأكد من التمبليت والملف.", "error");
+      notify("Import failed. Check the template and file.", "error");
     } finally {
-      els.csvInput.value = "";
+      if (els.csvInput) els.csvInput.value = "";
     }
   }
 
   function quickDefaultsPrompt() {
     return new Promise((resolve) => {
-      // بناء مودال بسيط جدًا (لا يتطلب CSS إضافي)
+      // Minimal modal (no extra CSS needed)
       const modal = ce("div", "modal");
       modal.innerHTML = `
         <div class="modal-inner">
-          <h3>خيارات افتراضية للاستيراد</h3>
-          <label>القسم الافتراضي (اختياري)</label>
-          <input type="text" id="impDefaultDept" placeholder="مثال: Internal Medicine" />
-          <label>عضو الفريق الافتراضي (اختياري)</label>
-          <input type="text" id="impDefaultMem" placeholder="مثال: جواد ابو صبحة" />
+          <h3>Import defaults (optional)</h3>
+          <label>Default Department</label>
+          <input type="text" id="impDefaultDept" placeholder="e.g., Internal Medicine" />
+          <label>Default Team Member</label>
+          <input type="text" id="impDefaultMem" placeholder="e.g., جواد أبو صبحة" />
           <div class="modal-actions">
-            <button id="impConfirm">استمرار</button>
-            <button id="impCancel" class="ghost">إلغاء</button>
+            <button id="impConfirm">Continue</button>
+            <button id="impCancel" class="ghost">Cancel</button>
           </div>
         </div>
       `;
+      Object.assign(modal.style, {
+        position: "fixed",
+        inset: "0",
+        background: "rgba(0,0,0,.45)",
+        display: "grid",
+        placeItems: "center",
+        zIndex: 80,
+      });
+      const inner = modal.querySelector(".modal-inner");
+      Object.assign(inner.style, {
+        width: "min(520px, 92dvw)",
+        background: "var(--card)",
+        border: "1px solid rgba(255,255,255,.1)",
+        borderRadius: "16px",
+        padding: "12px",
+        color: "var(--text)",
+        boxShadow: "var(--shadow)",
+      });
+      const actions = modal.querySelector(".modal-actions");
+      Object.assign(actions.style, { display: "flex", gap: "8px", marginTop: "10px" });
+
       document.body.appendChild(modal);
 
       const close = () => {
-        document.body.removeChild(modal);
+        try { document.body.removeChild(modal); } catch {}
       };
 
       modal.querySelector("#impCancel").addEventListener("click", () => {
         close();
-        resolve({}); // لا شيء افتراضي
+        resolve({});
       });
       modal.querySelector("#impConfirm").addEventListener("click", () => {
         const defaultDepartment = modal.querySelector("#impDefaultDept").value.trim();
@@ -233,16 +263,16 @@
   }
 
   // ------------------------------------------------------
-  // تفضيلات (نافذة مصغّرة)
+  // Preferences (very small dialog – optional path)
   // ------------------------------------------------------
   function openPreferences() {
     const prefs = App.getState().preferences;
     const modal = ce("div", "modal");
     modal.innerHTML = `
       <div class="modal-inner">
-        <h3>الإعدادات</h3>
+        <h3>Preferences</h3>
 
-        <label>الثيم</label>
+        <label>Theme</label>
         <select id="prefTheme">
           <option value="ocean">ocean</option>
           <option value="glow">glow</option>
@@ -257,28 +287,49 @@
           <option value="gradient">gradient</option>
         </select>
 
-        <label>شكل الحركة (Transition)</label>
+        <label>Transition style</label>
         <select id="prefTransStyle">
           <option value="fade">Fade</option>
-          <option value="slide">Slide</option>
+          <option value="Slide">Slide</option>
           <option value="glow">Glow</option>
         </select>
 
-        <label>سرعة الحركة (ms)</label>
+        <label>Transition speed (ms)</label>
         <input type="number" id="prefTransSpeed" min="80" max="2000" step="20" />
 
-        <label>GAS URL (رابط الويب آب)</label>
+        <label>GAS URL</label>
         <input type="text" id="prefGasUrl" placeholder="https://script.google.com/macros/s/....../exec" />
 
         <div class="modal-actions">
-          <button id="prefSave">حفظ</button>
-          <button id="prefCancel" class="ghost">إغلاق</button>
+          <button id="prefSave">Save</button>
+          <button id="prefCancel" class="ghost">Close</button>
         </div>
       </div>
     `;
+    Object.assign(modal.style, {
+      position: "fixed",
+      inset: "0",
+      background: "rgba(0,0,0,.45)",
+      display: "grid",
+      placeItems: "center",
+      zIndex: 80,
+    });
+    const inner = modal.querySelector(".modal-inner");
+    Object.assign(inner.style, {
+      width: "min(520px, 92dvw)",
+      background: "var(--card)",
+      border: "1px solid rgba(255,255,255,.1)",
+      borderRadius: "16px",
+      padding: "12px",
+      color: "var(--text)",
+      boxShadow: "var(--shadow)",
+    });
+    const actions = modal.querySelector(".modal-actions");
+    Object.assign(actions.style, { display: "flex", gap: "8px", marginTop: "10px" });
+
     document.body.appendChild(modal);
 
-    // قيم أولية
+    // initial values
     modal.querySelector("#prefTheme").value = prefs.theme || "ocean";
     modal.querySelector("#prefTransStyle").value = prefs.transitionStyle || "fade";
     modal.querySelector("#prefTransSpeed").value = prefs.transitionSpeed || 300;
@@ -298,21 +349,21 @@
       App.setPreference("transitionSpeed", speed);
       if (gasUrl) App.setPreference("gasUrl", gasUrl);
 
-      notify("تم حفظ الإعدادات.", "success");
+      notify("Preferences saved.", "success");
       close();
     });
   }
 
   // ------------------------------------------------------
-  // تطبيق تفضيلات الحركة بصيغة عامة (تُستَخدم في app-core أيضًا)
+  // Transition prefs (exposed to app-core.js)
   // ------------------------------------------------------
   function applyTransitionPrefs(style, speed) {
     document.documentElement.style.setProperty("--transition-speed", `${speed}ms`);
-    document.documentElement.setAttribute("data-transition", style || "fade");
+    document.documentElement.setAttribute("data-transition", (style || "fade").toLowerCase());
   }
 
   // ------------------------------------------------------
-  // تصدير UI API
+  // Export UI API
   // ------------------------------------------------------
   const UI = {
     initDom,
@@ -325,7 +376,7 @@
 
   global.UI = UI;
 
-  // عند تحميل DOM
+  // DOM ready
   document.addEventListener("DOMContentLoaded", () => {
     initDom();
   });
