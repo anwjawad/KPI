@@ -1,26 +1,26 @@
 /* ======================================================
    KPI2 • Palliative Care Monitor
-   ملف: analytics.js (ES Module)
-   - زر عائم لفتح لوحة "النتائج والتحليلات"
-   - يسحب البيانات من Google Sheets عبر GAS (pullAll) باستخدام JSONP
-   - تحليلات: إجماليات، أعضاء الفريق، التدخلات، الأقسام، الترند
-   - تصدير CSV للنتائج
+   File: analytics.js (EN version)
+   - Floating button to open "Analytics & Results" panel
+   - Fetches data from Google Sheets via GAS (pullAll) using JSONP
+   - Analytics: Overview, Team members, Interventions, Departments, Trends, Response Times
+   - CSV export for current tab
    ====================================================== */
 
 import { KEYS, DEFAULT_GAS_URL, buildJsonpUrl } from "./schema.js";
 
-/* ============== إعدادات عامة ============== */
+/* ============== UI IDs / Settings ============== */
 const ui = {
   fabId: "fab-analytics",
   panelId: "analytics-panel",
+  contentId: "an-content",
   canvasHeight: 220,
 };
 
-/* ============== أدوات قراءة التفضيلات/GAS ============== */
+/* ============== Preferences / GAS helpers ============== */
 function getPrefs() {
   try {
-    const p = JSON.parse(localStorage.getItem(KEYS.prefs) || "null") || {};
-    return p;
+    return JSON.parse(localStorage.getItem(KEYS.prefs) || "null") || {};
   } catch {
     return {};
   }
@@ -30,7 +30,7 @@ function getGasBase() {
   return (p.gasUrlOverride && p.gasUrlOverride.trim()) || DEFAULT_GAS_URL;
 }
 
-/* ============== JSONP خفيف ============== */
+/* ============== JSONP helper ============== */
 function jsonp(url) {
   return new Promise((resolve, reject) => {
     const cb = "__jsonp_cb_" + Math.random().toString(36).slice(2);
@@ -47,16 +47,15 @@ function jsonp(url) {
   });
 }
 
-/* ============== جلب البيانات من Google Sheets ============== */
+/* ============== Fetch from Google Sheets ============== */
 async function fetchAllFromSheet() {
   const gas = getGasBase();
   const url = buildJsonpUrl(gas, { action: "pullAll" });
   const res = await jsonp(url);
   if (!res || !Array.isArray(res.records)) throw new Error("No records");
-  // تنظيف/تطبيع بسيط
   return res.records.map((r) => ({
     id: r.id || "",
-    date: (r.date || "").slice(0, 10), // YYYY-MM-DD
+    date: (r.date || "").slice(0, 10),
     name: r.name || "",
     code: r.code || "",
     inout: r.inout || "",
@@ -64,24 +63,26 @@ async function fetchAllFromSheet() {
     dept: r.dept || "",
     intervention: r.intervention || "",
     member: r.member || "",
+    response_time: r.response_time || "",
+    delay_reason: r.delay_reason || "",
     notes: r.notes || "",
   }));
 }
 
-/* ============== أدوات تحليل ============== */
+/* ============== Analysis helpers ============== */
 const parseISO = (s) => {
   const [y, m, d] = (s || "0000-01-01").split("-").map((x) => +x);
-  return new Date(y, (m || 1) - 1, d || 1);
+  return new Date(y || 0, (m || 1) - 1, d || 1);
 };
 const fmtMonth = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-const fmtDate = (d) => d.toISOString().slice(0,10);
-const startOfWeek = (d) => { const x = new Date(d); const day = x.getDay(); x.setDate(x.getDate() - day); x.setHours(0,0,0,0); return x; }; // الأحد بداية
+const fmtDate = (d) => d.toISOString().slice(0, 10);
+const startOfWeek = (d) => { const x = new Date(d); const day = x.getDay(); x.setDate(x.getDate() - day); x.setHours(0,0,0,0); return x; };
 const fmtWeek = (d) => fmtDate(startOfWeek(d));
 const groupBy = (arr, keyFn) => arr.reduce((acc, x) => { const k = keyFn(x); (acc[k] ||= []).push(x); return acc; }, {});
 const countBy = (arr, keyFn) => arr.reduce((acc, x) => { const k = keyFn(x); acc[k] = (acc[k] || 0) + 1; return acc; }, {});
 const sortEntriesDesc = (obj) => Object.entries(obj).sort((a,b)=>b[1]-a[1]);
 
-/* ============== UI بناء الزر واللوحة ============== */
+/* ============== Inline styles for the panel ============== */
 function ensureStyles() {
   if (document.getElementById("analytics-inline-style")) return;
   const css = `
@@ -96,14 +97,12 @@ function ensureStyles() {
 #${ui.panelId}.open{ display:block; }
 #${ui.panelId} .backdrop{
   position:absolute; inset:0; background: rgba(0,0,0,.55);
-  animation: fadein var(--speed) var(--ease) both;
 }
 #${ui.panelId} .sheet{
   position:absolute; inset-inline: max(8px, 4dvw); inset-block-start: max(8px, 4dvh);
   inset-block-end: max(8px, 4dvh);
   background: var(--card); border:1px solid rgba(255,255,255,.1); border-radius: 18px;
   box-shadow: var(--shadow); padding: 12px; display:flex; flex-direction:column; gap: 10px;
-  animation: var(--motion-in);
 }
 #${ui.panelId} .header{
   display:flex; align-items:center; justify-content:space-between; gap:10px; padding-bottom:8px;
@@ -132,13 +131,14 @@ canvas.an-chart{ width: 100%; height: ${ui.canvasHeight}px; }
   document.head.appendChild(style);
 }
 
+/* ============== UI: Floating button & Panel skeleton ============== */
 function createFab() {
   if (document.getElementById(ui.fabId)) return;
   const btn = document.createElement("button");
   btn.id = ui.fabId;
   btn.className = "btn btn-primary";
-  btn.textContent = "📊 التحليلات";
-  btn.title = "عرض النتائج والتحليلات من Google Sheets";
+  btn.textContent = "📊 Analytics";
+  btn.title = "View analytics from Google Sheets";
   btn.addEventListener("click", openPanel);
   document.body.appendChild(btn);
 }
@@ -152,37 +152,35 @@ function createPanel() {
     <div class="sheet">
       <div class="header">
         <div class="an-actions">
-          <strong>النتائج والتحليلات</strong>
-          <button class="btn btn-ghost" id="an-refresh">⟳ تحديث من الشيت</button>
-          <button class="btn" id="an-export">⤓ تصدير CSV</button>
+          <strong>Analytics & Results</strong>
+          <button class="btn btn-ghost" id="an-refresh">⟳ Refresh</button>
+          <button class="btn" id="an-export">⤓ Export CSV</button>
         </div>
         <div class="tabs">
-          <button class="tab active" data-tab="overview">نظرة عامة</button>
-          <button class="tab" data-tab="members">أعضاء الفريق</button>
-          <button class="tab" data-tab="interventions">التدخلات</button>
-          <button class="tab" data-tab="departments">الأقسام</button>
-          <button class="tab" data-tab="trends">الترند</button>
+          <button class="tab active" data-tab="overview">Overview</button>
+          <button class="tab" data-tab="members">Team Members</button>
+          <button class="tab" data-tab="interventions">Interventions</button>
+          <button class="tab" data-tab="departments">Departments</button>
+          <button class="tab" data-tab="response">Response Times</button>
+          <button class="tab" data-tab="trends">Trends</button>
           <button class="btn btn-ghost" id="an-close">×</button>
         </div>
       </div>
-      <div class="content" id="an-content"></div>
+      <div class="content" id="${ui.contentId}"></div>
     </div>
   `;
   wrap.querySelector(".backdrop").addEventListener("click", closePanel);
   wrap.querySelector("#an-close").addEventListener("click", closePanel);
   wrap.querySelector("#an-refresh").addEventListener("click", () => refresh(true));
   wrap.querySelector("#an-export").addEventListener("click", exportCurrentCsv);
-
   wrap.querySelectorAll(".tab").forEach((t) =>
     t.addEventListener("click", () => switchTab(t.getAttribute("data-tab")))
   );
-
   document.body.appendChild(wrap);
 }
 
 function openPanel() {
   document.getElementById(ui.panelId).classList.add("open");
-  // أول فتح: تحميل إن لم تُحمّل
   if (!state.records.length) refresh(true);
 }
 function closePanel() {
@@ -196,31 +194,32 @@ function switchTab(name) {
   renderActive();
 }
 
-/* ============== حالة التحليل ============== */
+/* ============== State ============== */
 const state = {
   records: [],
   activeTab: "overview",
   lastCsv: { filename: "analytics.csv", content: "type,value\n" },
 };
 
-/* ============== رسم بسيط على Canvas ============== */
+/* ============== Simple bar chart (no libs) ============== */
 function barChart(canvas, labels, values) {
+  if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const W = canvas.clientWidth || 600;
   const H = canvas.clientHeight || ui.canvasHeight;
   canvas.width = W * devicePixelRatio;
   canvas.height = H * devicePixelRatio;
   ctx.scale(devicePixelRatio, devicePixelRatio);
-
   ctx.clearRect(0, 0, W, H);
   ctx.font = "12px Cairo, system-ui";
   ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--text") || "#fff";
 
   const max = Math.max(1, ...values);
   const pad = 28;
-  const barW = Math.max(6, (W - pad * 2) / values.length - 10);
+  const gap = 10;
+  const barW = Math.max(6, (W - pad * 2) / Math.max(1, values.length) - gap);
 
-  // axis
+  // baseline
   ctx.globalAlpha = 0.3;
   ctx.beginPath();
   ctx.moveTo(pad, H - pad);
@@ -229,30 +228,33 @@ function barChart(canvas, labels, values) {
   ctx.stroke();
   ctx.globalAlpha = 1;
 
-  // bars
   values.forEach((v, i) => {
-    const x = pad + i * (barW + 10);
+    const x = pad + i * (barW + gap);
     const h = Math.round(((H - pad * 2) * v) / max);
     const y = H - pad - h;
-    // bar
     ctx.fillStyle = "#7dd3fc";
     ctx.fillRect(x, y, barW, h);
-    // value
     ctx.fillStyle = "#e5f2ff";
     ctx.fillText(String(v), x, y - 4);
-    // label
     ctx.save();
     ctx.globalAlpha = 0.9;
     ctx.translate(x + barW / 2, H - pad + 12);
     ctx.rotate(-Math.PI / 6);
     ctx.fillStyle = "#b6c7d8";
     ctx.textAlign = "center";
-    ctx.fillText(labels[i]?.toString().slice(0, 12), 0, 0);
+    ctx.fillText(String(labels[i] ?? "").slice(0, 12), 0, 0);
     ctx.restore();
   });
 }
 
-/* ============== تصدير CSV ============== */
+/* ============== CSV helpers ============== */
+function csvCell(v) {
+  const s = `${v ?? ""}`;
+  if (s.includes('"') || s.includes(",") || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
 function downloadCsv(filename, content) {
   const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -265,14 +267,22 @@ function exportCurrentCsv() {
   downloadCsv(state.lastCsv.filename, state.lastCsv.content);
 }
 
-/* ============== رندرة التبويبات ============== */
+/* ============== Generic render pieces ============== */
+function tableify(headers, rows) {
+  const head = `<thead><tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr></thead>`;
+  const body = `<tbody>${(rows||[]).map(r=>`<tr>${r.map(c=>`<td>${c ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  return `<table class="an-table">${head}${body}</table>`;
+}
+
+/* ============== Render per tab ============== */
 function renderActive() {
-  const c = document.getElementById("an-content");
+  const c = document.getElementById(ui.contentId);
   if (!c) return;
   if (state.activeTab === "overview") renderOverview(c);
   else if (state.activeTab === "members") renderMembers(c);
   else if (state.activeTab === "interventions") renderInterventions(c);
   else if (state.activeTab === "departments") renderDepartments(c);
+  else if (state.activeTab === "response") renderResponseTimes(c);
   else if (state.activeTab === "trends") renderTrends(c);
 }
 
@@ -289,30 +299,24 @@ function renderOverview(container) {
   container.innerHTML = `
     <div class="an-grid">
       <div class="an-card">
-        <h3 class="an-title">إجمالي السجلات</h3>
+        <h3 class="an-title">Total Records</h3>
         <div class="an-kpi">${total}</div>
-        <div class="muted">عدد المرضى عبر كامل التاريخ بالشيت</div>
+        <div class="muted">All patient records in the sheet</div>
       </div>
-
       <div class="an-card">
         <h3 class="an-title">In/Out Ratio</h3>
         <div class="an-kpi">${outCount} Out / ${inCount} In</div>
-        <div class="muted">تمييز طابع العمل اليومي</div>
       </div>
-
       <div class="an-card">
         <h3 class="an-title">Top Departments</h3>
-        ${tableify(["القسم","العدد"], byDept.slice(0,8))}
+        ${tableify(["Department","Count"], byDept.slice(0,8))}
       </div>
-
       <div class="an-card">
         <h3 class="an-title">Top Out Types (Out only)</h3>
-        ${tableify(["Out Type","العدد"], byOutType.slice(0,8))}
+        ${tableify(["Out Type","Count"], byOutType.slice(0,8))}
       </div>
     </div>
   `;
-
-  // CSV
   const csv = [
     "metric,value",
     `total,${total}`,
@@ -332,38 +336,26 @@ function renderOverview(container) {
 function renderMembers(container) {
   const list = state.records.map(r => ({...r, d: parseISO(r.date)}));
   const byMember = groupBy(list, r => r.member || "—");
-
-  // اليوم/الأسبوع/الشهر/السنة لكل عضو
   const rows = [];
   Object.entries(byMember).forEach(([mem, arr]) => {
     const today = fmtDate(new Date());
     const todayCount = arr.filter(r => r.date === today).length;
-
     const wKey = fmtWeek(new Date());
     const weekCount = arr.filter(r => fmtWeek(r.d) === wKey).length;
-
     const mKey = fmtMonth(new Date());
     const monthCount = arr.filter(r => fmtMonth(r.d) === mKey).length;
-
     const y = new Date().getFullYear();
     const yearCount = arr.filter(r => (r.d.getFullYear() === y)).length;
-
     rows.push([mem, todayCount, weekCount, monthCount, yearCount, arr.length]);
   });
-
   rows.sort((a,b)=>b[5]-a[5]);
-
   container.innerHTML = `
     <div class="an-card">
-      <h3 class="an-title">إنتاجية أعضاء الفريق (اليوم/الأسبوع/الشهر/السنة/الإجمالي)</h3>
-      ${tableify(["العضو","اليوم","الأسبوع","الشهر","السنة","الإجمالي"], rows)}
+      <h3 class="an-title">Team productivity (Today / Week / Month / Year / Total)</h3>
+      ${tableify(["Member","Today","Week","Month","Year","Total"], rows)}
     </div>
   `;
-
-  const csv = [
-    "member,today,week,month,year,total",
-    ...rows.map(r=>r.map(csvCell).join(",")),
-  ].join("\n");
+  const csv = ["member,today,week,month,year,total", ...rows.map(r=>r.map(csvCell).join(","))].join("\n");
   state.lastCsv = { filename: "members.csv", content: csv };
 }
 
@@ -373,22 +365,18 @@ function renderInterventions(container) {
   const byInterv = sortEntriesDesc(countBy(list, r=>r.intervention||"—"));
   const labels = byInterv.map(([k])=>k);
   const values = byInterv.map(([,v])=>v);
-
   container.innerHTML = `
     <div class="an-grid">
       <div class="an-card">
-        <h3 class="an-title">عدد السجلات لكل نوع تدخل</h3>
-        ${tableify(["التدخل","العدد"], byInterv)}
+        <h3 class="an-title">Intervention Counts</h3>
+        ${tableify(["Intervention","Count"], byInterv)}
       </div>
       <div class="an-card">
-        <h3 class="an-title">رسم عمودي</h3>
+        <h3 class="an-title">Bar Chart</h3>
         <canvas class="an-chart" id="an-int-chart" height="${ui.canvasHeight}"></canvas>
       </div>
-    </div>
-  `;
-  const cv = document.getElementById("an-int-chart");
-  barChart(cv, labels, values);
-
+    </div>`;
+  barChart(document.getElementById("an-int-chart"), labels, values);
   const csv = ["intervention,count", ...byInterv.map(([k,v])=>`${csvCell(k)},${v}`)].join("\n");
   state.lastCsv = { filename: "interventions.csv", content: csv };
 }
@@ -399,124 +387,100 @@ function renderDepartments(container) {
   const byDept = sortEntriesDesc(countBy(list, r=>r.dept||"—"));
   const labels = byDept.map(([k])=>k);
   const values = byDept.map(([,v])=>v);
-
   container.innerHTML = `
     <div class="an-grid">
       <div class="an-card">
-        <h3 class="an-title">سجلات حسب القسم</h3>
-        ${tableify(["القسم","العدد"], byDept)}
+        <h3 class="an-title">Records by Department</h3>
+        ${tableify(["Department","Count"], byDept)}
       </div>
       <div class="an-card">
-        <h3 class="an-title">رسم عمودي</h3>
+        <h3 class="an-title">Bar Chart</h3>
         <canvas class="an-chart" id="an-dept-chart" height="${ui.canvasHeight}"></canvas>
       </div>
-    </div>
-  `;
+    </div>`;
   barChart(document.getElementById("an-dept-chart"), labels, values);
-
   const csv = ["department,count", ...byDept.map(([k,v])=>`${csvCell(k)},${v}`)].join("\n");
   state.lastCsv = { filename: "departments.csv", content: csv };
 }
 
-/* --- Trends --- */
-function renderTrends(container) {
-  const list = state.records.map(r => ({...r, d: parseISO(r.date)}));
-  // ترند يومي (آخر 30 يوم)
-  const today = new Date(); today.setHours(0,0,0,0);
-  const back = new Date(today); back.setDate(today.getDate()-29);
+/* --- Response Times --- */
+function renderResponseTimes(container) {
+  const list = state.records;
+  const counts = sortEntriesDesc(countBy(list, r => r.response_time || "—"));
+  const delayed = list.filter(r => r.response_time === "more than hour");
+  const topReasons = sortEntriesDesc(countBy(delayed, r => r.delay_reason || "—"));
 
-  const byDay = countBy(list.filter(r => r.d >= back), r => fmtDate(r.d));
-  const dayKeys = [];
-  for (let x = new Date(back); x <= today; x.setDate(x.getDate()+1)) dayKeys.push(fmtDate(new Date(x)));
-  const dayVals = dayKeys.map(k => byDay[k] || 0);
-
-  // ترند أسبوعي (آخر 12 أسبوع)
-  const wToday = startOfWeek(new Date());
-  const wStart = new Date(wToday); wStart.setDate(wToday.getDate() - 7*11);
-  const byWeek = countBy(list.filter(r => r.d >= wStart), r => fmtWeek(r.d));
-  const weekKeys = [];
-  for (let x = new Date(wStart); x <= wToday; x.setDate(x.getDate()+7)) weekKeys.push(fmtDate(startOfWeek(new Date(x))));
-  const weekVals = weekKeys.map(k => byWeek[k] || 0);
+  const labels = counts.map(([k])=>k);
+  const values = counts.map(([,v])=>v);
 
   container.innerHTML = `
     <div class="an-grid">
       <div class="an-card">
-        <h3 class="an-title">ترند يومي (آخر 30 يوم)</h3>
-        <canvas class="an-chart" id="an-day-chart" height="${ui.canvasHeight}"></canvas>
+        <h3 class="an-title">Response Time Distribution</h3>
+        ${tableify(["Response Time","Count"], counts)}
       </div>
       <div class="an-card">
-        <h3 class="an-title">ترند أسبوعي (آخر 12 أسبوع)</h3>
-        <canvas class="an-chart" id="an-week-chart" height="${ui.canvasHeight}"></canvas>
+        <h3 class="an-title">Bar Chart</h3>
+        <canvas class="an-chart" id="an-rt-chart" height="${ui.canvasHeight}"></canvas>
+      </div>
+      <div class="an-card">
+        <h3 class="an-title">Delay Reasons (when &gt; 1 hour)</h3>
+        ${tableify(["Reason","Count"], topReasons)}
       </div>
     </div>
   `;
-  barChart(document.getElementById("an-day-chart"), dayKeys.map(k=>k.slice(5)), dayVals);
-  barChart(document.getElementById("an-week-chart"), weekKeys.map(k=>k.slice(5)), weekVals);
+  barChart(document.getElementById("an-rt-chart"), labels, values);
 
-  // CSV
   const csv = [
-    "date,count",
-    ...dayKeys.map((k,i)=>`${k},${dayVals[i]}`),
+    "response_time,count",
+    ...counts.map(([k,v])=>`${csvCell(k)},${v}`),
     "",
-    "week_start,count",
-    ...weekKeys.map((k,i)=>`${k},${weekVals[i]}`),
+    "delay_reason,count",
+    ...topReasons.map(([k,v])=>`${csvCell(k)},${v}`),
   ].join("\n");
+  state.lastCsv = { filename: "response_times.csv", content: csv };
+}
+
+/* --- Trends (by month) --- */
+function renderTrends(container) {
+  const list = state.records.map(r => ({...r, d: parseISO(r.date)})).filter(r=>!isNaN(r.d));
+  const byMonth = sortEntriesDesc(countBy(list, r=>fmtMonth(r.d))).sort((a,b)=>a[0].localeCompare(b[0]));
+  const labels = byMonth.map(([k])=>k);
+  const values = byMonth.map(([,v])=>v);
+
+  container.innerHTML = `
+    <div class="an-grid">
+      <div class="an-card">
+        <h3 class="an-title">Monthly Trend (all records)</h3>
+        <canvas class="an-chart" id="an-trend-chart" height="${ui.canvasHeight}"></canvas>
+      </div>
+      <div class="an-card">
+        <h3 class="an-title">Monthly Summary</h3>
+        ${tableify(["Month","Count"], byMonth)}
+      </div>
+    </div>
+  `;
+  barChart(document.getElementById("an-trend-chart"), labels, values);
+  const csv = ["month,count", ...byMonth.map(([k,v])=>`${csvCell(k)},${v}`)].join("\n");
   state.lastCsv = { filename: "trends.csv", content: csv };
 }
 
-/* ============== عناصر مساعدة للعرض ============== */
-function tableify(headers, rows) {
-  const th = `<tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr>`;
-  const tr = rows.map(r => `<tr>${r.map(c=>`<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("");
-  return `<table class="an-table"><thead>${th}</thead><tbody>${tr}</tbody></table>`;
-}
-function escapeHtml(v) {
-  v = (v ?? "").toString();
-  return v.replace(/[&<>"']/g, (m)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
-}
-function csvCell(v){
-  const s = (v ?? "").toString();
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
-}
-
-/* ============== تحديث البيانات ============== */
-async function refresh(showToast = false) {
+/* ============== Data refresh ============== */
+async function refresh(force = false) {
   try {
-    setBusy(true);
-    const recs = await fetchAllFromSheet();
-    state.records = recs;
+    const data = await fetchAllFromSheet();
+    state.records = Array.isArray(data) ? data : [];
     renderActive();
-    if (showToast) showInfo("تم التحديث من Google Sheets.");
   } catch (e) {
     console.error(e);
-    showInfo("تعذر تحديث البيانات من Google Sheets.", "danger");
-  } finally {
-    setBusy(false);
+    const c = document.getElementById(ui.contentId);
+    if (c) c.innerHTML = `<div class="an-card"><h3 class="an-title">Error</h3><p>Could not load data from Google Sheets. Check GAS URL in Preferences.</p></div>`;
   }
 }
 
-/* ============== رسائل صغيرة (تستخدم toast الموجود إذا وُجد) ============== */
-function showInfo(msg, type="info") {
-  const toast = document.getElementById("toast");
-  const text = document.getElementById("toast-text");
-  if (toast && text) {
-    toast.classList.remove("toast-hidden","toast-success","toast-danger","toast-info");
-    toast.classList.add(`toast-${type}`);
-    text.textContent = msg;
-    return;
-  }
-  // fallback
-  console.log(`[${type}] ${msg}`);
-}
-function setBusy(b){
-  const btn = document.getElementById(ui.fabId);
-  if (btn) btn.disabled = !!b;
-}
-
-/* ============== إقلاع ============== */
-(function boot(){
+/* ============== Boot ============== */
+document.addEventListener("DOMContentLoaded", () => {
   ensureStyles();
   createFab();
   createPanel();
-  // تحميل أولي صامت في الخلفية عند أول فتح للوحة
-})();
+});
