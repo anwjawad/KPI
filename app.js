@@ -1,11 +1,12 @@
 /* ======================================================
    KPI2 • Palliative Care Monitor
-   ملف: app.js
-   - تهيئة الواجهة، التيمات والحركات والتفضيلات
-   - إدارة اليوم الجديد
-   - إضافة/تعديل/حذف وImport CSV
-   - فلاتر وجدول دائم + عدّادات
-   - JSONP مع GAS (Sync/Load) لتفادي CORS
+   File: app.js
+   - UI init, themes, preferences
+   - New Day handling
+   - Add/Edit/Delete & CSV Import
+   - Filters & persistent table + counters
+   - JSONP with GAS (Sync/Load) to avoid CORS
+   - EN UI + Response Time & Delay Reason support
    ====================================================== */
 
 import {
@@ -30,22 +31,21 @@ import {
   chunkString,
 } from "./schema.js";
 
-/* ============== حالة التطبيق ============== */
+/* ============== App State ============== */
 const state = {
-  patientsAll: [],   // كل السجل عبر الأيام (لا يحذف)
+  patientsAll: [],   // persistent records (never cleared by New Day)
   currentDay: todayISO(),
   prefs: structuredClone(DEFAULT_PREFERENCES),
   gasBase: DEFAULT_GAS_URL,
-  importContext: { inout: "out" }, // يتغير حسب زر الاستيراد
+  importContext: { inout: "out" }, // toggled by which import button the user clicked
 };
 
-/* ============== أدوات التخزين المحلي ============== */
+/* ============== Local Storage Helpers ============== */
 const store = {
   load() {
     try {
       const ver = localStorage.getItem(KEYS.version);
       if (ver !== APP_VERSION) {
-        // ترقية مستقبلية إن لزم
         localStorage.setItem(KEYS.version, APP_VERSION);
       }
       const all = JSON.parse(localStorage.getItem(KEYS.all) || "[]");
@@ -70,7 +70,7 @@ const store = {
   },
 };
 
-/* ============== عناصر DOM ============== */
+/* ============== DOM Shortcuts ============== */
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -129,6 +129,8 @@ const el = {
   fldDept: $("#fld-dept"),
   fldIntervention: $("#fld-intervention"),
   fldMember: $("#fld-member"),
+  fldResponseTime: $("#fld-response-time"),
+  fldDelayReason: $("#fld-delay-reason"),
   fldNotes: $("#fld-notes"),
   btnSavePatient: $("#btn-save-patient"),
 
@@ -151,14 +153,14 @@ const el = {
   rowTemplate: $("#row-template"),
 };
 
-let editId = null; // لتحديد السجل الجاري تعديله
+let editId = null; // currently editing record id
 
-/* ============== تهيئة UI ============== */
+/* ============== UI Init ============== */
 function initUI() {
-  // تاريخ اليوم الظاهر
+  // Today label
   el.todayLabel.textContent = state.currentDay;
 
-  // تحميل الثيم
+  // Theme
   document.body.setAttribute("data-theme", state.prefs.theme);
   el.themeSelect.value = state.prefs.theme;
   el.themeSelect.addEventListener("change", () => {
@@ -167,38 +169,38 @@ function initUI() {
     store.savePrefs();
   });
 
-  // حركة وسرعة وكثافة
+  // Motion & density
   applyMotionAndDensity();
 
-  // روابط المودالات
+  // Modals
   el.btnPrefs.addEventListener("click", () => openModal(el.modalPrefs));
   attachModalClose();
 
-  // زر بدء يوم جديد
+  // New Day
   el.btnNewDay.addEventListener("click", handleNewDay);
 
-  // إضافة يدوي
+  // Add manually
   el.btnAddManual.addEventListener("click", () => openPatientModal());
 
-  // الاستيراد
+  // Import buttons
   el.btnImportOut.addEventListener("click", () => {
     state.importContext.inout = "out";
-    $("#modal-import-title").textContent = "استيراد Outpatient CSV";
+    $("#modal-import-title").textContent = "Import Outpatient CSV";
     openModal(el.modalImport);
   });
   el.btnImportIn.addEventListener("click", () => {
     state.importContext.inout = "in";
-    $("#modal-import-title").textContent = "استيراد Inpatient CSV";
+    $("#modal-import-title").textContent = "Import Inpatient CSV";
     openModal(el.modalImport);
   });
 
-  // تحميل قالب CSV كـ blob
+  // CSV template link
   const tmpl = buildCsvTemplate();
   const blob = new Blob([tmpl], { type: "text/csv;charset=utf-8" });
   el.linkTemplate.href = URL.createObjectURL(blob);
   el.linkTemplate.download = "kpi2_template.csv";
 
-  // OutType في التولبار: عندما other نفعّل حقل الكتابة
+  // OutType toolbar "other" toggle
   function handleOutToolbar() {
     const v = el.outTypeSelect.value;
     el.outTypeOther.classList.toggle("hidden", v !== "other");
@@ -206,24 +208,24 @@ function initUI() {
   el.outTypeSelect.addEventListener("change", handleOutToolbar);
   handleOutToolbar();
 
-  // فلاتر
+  // Filters
   el.btnApplyFilters.addEventListener("click", renderTable);
   el.btnClearFilters.addEventListener("click", clearFilters);
 
-  // مودال المريض حفظ
+  // Patient modal save
   el.formPatient.addEventListener("submit", onSavePatient);
 
-  // مودال الاستيراد
+  // Import modal
   el.formImport.addEventListener("submit", onImportCsv);
 
-  // تفضيلات
+  // Preferences
   fillPrefsForm();
   el.formPrefs.addEventListener("submit", onSavePrefs);
 
-  // مزامنة
+  // Sync
   el.btnSync.addEventListener("click", syncAllToGAS);
 
-  // تقارير
+  // Reports
   el.btnWeekly.addEventListener("click", () => exportReport("week"));
   el.btnMonthly.addEventListener("click", () => exportReport("month"));
   el.btnYearly.addEventListener("click", () => exportReport("year"));
@@ -231,19 +233,19 @@ function initUI() {
   // Toast close
   el.toastClose.addEventListener("click", () => hideToast());
 
-  // أول عرض
+  // First render
   renderTable();
   updateCounters();
 }
 
-/* ============== تفضيلات: تطبيق الحركة والكثافة ============== */
+/* ============== Motion & Density ============== */
 function applyMotionAndDensity() {
   document.documentElement.style.setProperty("--speed", `${clamp(+state.prefs.speed || 240, 80, 2000)}ms`);
   document.documentElement.setAttribute("data-motion", state.prefs.motion);
   document.documentElement.setAttribute("data-density", state.prefs.uiDensity === "compact" ? "compact" : "cozy");
 }
 
-/* ============== مودالات ============== */
+/* ============== Modals ============== */
 function openModal(dialog) {
   dialog.showModal();
 }
@@ -269,7 +271,7 @@ function hideToast() {
   el.toast.classList.add("toast-hidden");
 }
 
-/* ============== جدول + ريندر ============== */
+/* ============== Filters + Render ============== */
 function clearFilters() {
   el.filterDept.value = "";
   el.filterIntervention.value = "";
@@ -300,7 +302,6 @@ function applyFilters(list) {
 }
 
 function renderTable() {
-  // السجل دائم لا يُحذف؛ الفلاتر تتحكم بالعرض
   const rows = applyFilters([...state.patientsAll]).sort((a, b) => (a.date > b.date ? -1 : 1));
   el.tbody.innerHTML = "";
 
@@ -314,6 +315,8 @@ function renderTable() {
     tr.querySelector('[data-col="dept"]').textContent = r.dept || "";
     tr.querySelector('[data-col="intervention"]').textContent = r.intervention || "";
     tr.querySelector('[data-col="member"]').textContent = r.member || "";
+    tr.querySelector('[data-col="response_time"]').textContent = r.response_time || "";
+    tr.querySelector('[data-col="delay_reason"]').textContent = r.delay_reason || "";
     tr.querySelector('[data-col="notes"]').textContent = r.notes || "";
 
     const btnEdit = tr.querySelector('[data-action="edit"]');
@@ -325,7 +328,7 @@ function renderTable() {
   }
 }
 
-/* ============== عدّادات الفريق ليوم محدد (currentDay) ============== */
+/* ============== Per-day Counters ============== */
 function updateCounters() {
   const day = state.currentDay;
   const list = state.patientsAll.filter((r) => r.date === day);
@@ -340,45 +343,59 @@ function updateCounters() {
   el.countTotal.textContent = list.length;
 }
 
-/* ============== بدء يوم جديد ============== */
+/* ============== New Day ============== */
 function handleNewDay() {
-  // نحفظ اليوم السابق ضمن السجل (هو محفوظ أساساً؛ لا حذف)
   const prevDay = state.currentDay;
   state.currentDay = todayISO();
   store.saveDay();
   el.todayLabel.textContent = state.currentDay;
 
-  showToast(`تم بدء يوم جديد (${state.currentDay}) وحُفظت بيانات ${prevDay}.`, "success");
+  showToast(`New day started (${state.currentDay}). Previous day ${prevDay} preserved.`, "success");
   updateCounters();
 }
 
-/* ============== إضافة/تعديل مريض ============== */
+/* ============== Add/Edit Patient ============== */
 function openPatientModal(rec = null) {
   editId = rec?.id || null;
-  el.modalPatientTitle.textContent = editId ? "تعديل بيانات" : "إضافة مريض";
+  el.modalPatientTitle.textContent = editId ? "Edit Patient" : "Add Patient";
 
-  // تحديد قيم افتراضية ذكية
+  // defaults
   el.fldDate.value = rec?.date || state.currentDay;
   el.fldName.value = rec?.name || "";
   el.fldCode.value = rec?.code || "";
   el.fldInout.value = rec?.inout || "out";
-  el.fldOutType.value = OUT_TYPES.includes(rec?.outtype) ? rec.outtype : (rec?.outtype ? "other" : (el.outTypeSelect.value || "")); // إذا قيمة مخصصة، نعرض "other"
+  el.fldOutType.value = OUT_TYPES.includes(rec?.outtype) ? rec.outtype : (rec?.outtype ? "other" : (el.outTypeSelect.value || ""));
   el.fldOutTypeOther.value = OUT_TYPES.includes(rec?.outtype) ? "" : (rec?.outtype || (el.outTypeOther.value || ""));
   el.fldDept.value = rec?.dept || "";
   el.fldIntervention.value = rec?.intervention || INTERVENTIONS[0];
   el.fldMember.value = rec?.member || PALLIATIVE_MEMBERS[0];
-  el.fldNotes.value = rec?.notes || "";
 
-  // إظهار/إخفاء حقل other
+  // NEW: response time & delay reason
+  el.fldResponseTime.value = rec?.response_time || "within half hour";
+  el.fldDelayReason.value = rec?.delay_reason || "";
+
+  // toggle other outtype input
   handleOutOtherField();
 
+  // toggle delay reason by response time
+  handleDelayReasonVisibility();
+
+  // attach one-time listeners for toggles
   el.fldOutType.addEventListener("change", handleOutOtherField, { once: true });
+  el.fldResponseTime.addEventListener("change", handleDelayReasonVisibility);
+
   openModal(el.modalPatient);
 }
 
 function handleOutOtherField() {
   const v = el.fldOutType.value;
   el.fldOutTypeOther.classList.toggle("hidden", v !== "other");
+}
+
+function handleDelayReasonVisibility() {
+  const needsReason = el.fldResponseTime.value === "more than hour";
+  el.fldDelayReason.classList.toggle("hidden", !needsReason);
+  if (!needsReason) el.fldDelayReason.value = "";
 }
 
 function onSavePatient(e) {
@@ -394,6 +411,11 @@ function onSavePatient(e) {
     dept: el.fldDept.value.trim(),
     intervention: el.fldIntervention.value,
     member: el.fldMember.value,
+
+    // NEW fields
+    response_time: el.fldResponseTime.value,
+    delay_reason: (el.fldResponseTime.value === "more than hour") ? el.fldDelayReason.value.trim() : "",
+
     notes: el.fldNotes.value.trim(),
   };
 
@@ -406,10 +428,10 @@ function onSavePatient(e) {
   if (editId) {
     const i = state.patientsAll.findIndex((x) => x.id === editId);
     if (i >= 0) state.patientsAll[i] = data;
-    showToast("تم تحديث السجل.", "success");
+    showToast("Record updated.", "success");
   } else {
     state.patientsAll.push(toPatientRecord(data));
-    showToast("تمت إضافة المريض.", "success");
+    showToast("Patient added.", "success");
   }
 
   store.saveAll();
@@ -417,7 +439,7 @@ function onSavePatient(e) {
   renderTable();
   updateCounters();
 
-  // مزامنة تلقائية
+  // Auto sync
   if (state.prefs.autoSync === "on") syncAllToGAS({ silent: true });
 }
 
@@ -428,69 +450,73 @@ function deletePatient(id) {
   store.saveAll();
   renderTable();
   updateCounters();
-  showToast("تم حذف السجل.", "success");
+  showToast("Record deleted.", "success");
   if (state.prefs.autoSync === "on") syncAllToGAS({ silent: true });
 }
 
-/* ============== استيراد CSV ============== */
+/* ============== CSV Import ============== */
 async function onImportCsv(e) {
   e.preventDefault();
   const file = el.fldFile.files?.[0];
   if (!file) {
-    showToast("الرجاء اختيار ملف CSV.", "danger");
+    showToast("Please choose a CSV file.", "danger");
     return;
   }
 
   const text = await file.text();
   const rows = parseCsv(text);
   if (!rows.length) {
-    showToast("ملف CSV فارغ.", "danger");
+    showToast("CSV file is empty.", "danger");
     return;
   }
 
   const bulkMember = el.fldBulkMember.value || "";
   const bulkDept = el.fldBulkDept.value.trim() || "";
 
-  // صف الرأس
+  // header
   const headerRaw = rows[0].map((h) => (h || "").toString().trim().toLowerCase());
   const header = headerRaw.map((h) => CSV_HEADER_MAP[h] || h);
 
   const imports = [];
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
-    if (!row || row.every((c) => !`${c}`.trim())) continue; // تجاهل صفوف فارغة
+    if (!row || row.every((c) => !`${c}`.trim())) continue;
 
     const obj = {};
     for (let c = 0; c < header.length; c++) {
       const key = header[c];
-      if (!CSV_HEADERS.includes(key)) continue; // تجاهل أعمدة غير معروفة
+      if (!CSV_HEADERS.includes(key)) continue;
       const val = (row[c] || "").toString().trim();
-      if (val === "") continue; // تجاهل الأعمدة الفارغة
+      if (val === "") continue;
       obj[key] = val;
     }
 
-    // تطبيق in/out من سياق زر الاستيراد
+    // set in/out from which import button used
     obj.inout = state.importContext.inout;
 
-    // تطبيع outtype
+    // outtype normalization
     if (obj.outtype && obj.outtype.toLowerCase() === "other" && !obj._other) {
-      // إذا الملف كتب "other" بدون نص، نتركها other ونسمح بالتعديل لاحقاً
       obj.outtype = "other";
     }
 
-    // Bulk department/member
+    // bulk defaults
     if (bulkDept && !obj.dept) obj.dept = bulkDept;
     if (bulkMember && !obj.member) obj.member = bulkMember;
 
-    // ملء حقول ناقصة افتراضياً
+    // fill missing defaults
     obj.date = obj.date || state.currentDay;
     obj.intervention = obj.intervention || INTERVENTIONS[0];
     obj.member = obj.member || PALLIATIVE_MEMBERS[0];
     obj.outtype = obj.outtype || (state.importContext.inout === "out" ? (el.outTypeSelect.value || "") : "");
 
+    // NEW: response_time default
+    obj.response_time = obj.response_time || "within half hour";
+    // if not more than hour, clear delay_reason if provided
+    if (obj.response_time !== "more than hour") obj.delay_reason = "";
+
     const rec = toPatientRecord(obj);
 
-    // فاليديشن أساسي؛ نتجاوز السطر إذا فشل
+    // Validate; skip row if invalid
     const errs = validatePatient(rec);
     if (errs.length) {
       console.warn("CSV row skipped due to validation:", r + 1, errs);
@@ -500,7 +526,7 @@ async function onImportCsv(e) {
   }
 
   if (!imports.length) {
-    showToast("لم يتم استيراد أي سجلات (تحقق من الأعمدة).", "danger");
+    showToast("No records were imported (check headers).", "danger");
     return;
   }
 
@@ -510,12 +536,12 @@ async function onImportCsv(e) {
   el.formImport.reset();
   renderTable();
   updateCounters();
-  showToast(`تم استيراد ${imports.length} سجلّاً.`, "success");
+  showToast(`Imported ${imports.length} record(s).`, "success");
 
   if (state.prefs.autoSync === "on") syncAllToGAS({ silent: true });
 }
 
-/** Parser CSV بسيط يدعم الفواصل والنصوص بين أقواس اقتباس */
+/** Minimal CSV parser, handles quotes and commas */
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -526,38 +552,31 @@ function parseCsv(text) {
     const ch = text[i];
     if (ch === '"') {
       if (inQuotes && text[i + 1] === '"') {
-        cur += '"'; // escaped quote
-        i++;
+        cur += '"'; i++;
       } else {
         inQuotes = !inQuotes;
       }
     } else if (ch === "," && !inQuotes) {
-      row.push(cur);
-      cur = "";
+      row.push(cur); cur = "";
     } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
       if (cur || row.length) {
         row.push(cur);
         rows.push(row);
-        row = [];
-        cur = "";
+        row = []; cur = "";
       }
     } else {
       cur += ch;
     }
   }
-  if (cur || row.length) {
-    row.push(cur);
-    rows.push(row);
-  }
-  // تنظيف النهاية من أسطر فارغة
+  if (cur || row.length) { row.push(cur); rows.push(row); }
   return rows.filter((r) => r.length && r.some((c) => `${c}`.trim() !== ""));
 }
 
-/* ============== تقارير (أسبوع/شهر/سنة) ============== */
+/* ============== Reports (Week/Month/Year) ============== */
 function exportReport(kind = "week") {
   const all = state.patientsAll;
   if (!all.length) {
-    showToast("لا توجد بيانات للتقرير.", "danger");
+    showToast("No data to export.", "danger");
     return;
   }
   const now = new Date(state.currentDay);
@@ -567,8 +586,7 @@ function exportReport(kind = "week") {
 
   let from, to, filename;
   if (kind === "week") {
-    // نفترض الأسبوع يبدأ الأحد (يمكن تعديل ذلك)
-    const idx = now.getDay(); // 0-6
+    const idx = now.getDay(); // 0-6, week starts Sunday
     const start = new Date(now);
     start.setDate(day - idx);
     const end = new Date(start);
@@ -592,7 +610,7 @@ function exportReport(kind = "week") {
 
   const filtered = all.filter((r) => r.date >= from && r.date <= to);
   if (!filtered.length) {
-    showToast("لا توجد بيانات في المدى المحدد.", "danger");
+    showToast("No data in the selected range.", "danger");
     return;
   }
 
@@ -606,7 +624,7 @@ function exportReport(kind = "week") {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast("تم توليد التقرير وتنزيله.", "success");
+  showToast("Report generated and downloaded.", "success");
 }
 
 function iso(d) {
@@ -628,6 +646,8 @@ function buildCsvFromRecords(list) {
       escapeCsv(r.dept || ""),
       escapeCsv(r.intervention || ""),
       escapeCsv(r.member || ""),
+      escapeCsv(r.response_time || ""), // NEW
+      escapeCsv(r.delay_reason || ""),  // NEW
       escapeCsv(r.notes || ""),
     ];
     lines.push(row.join(","));
@@ -643,11 +663,7 @@ function escapeCsv(v) {
   return v;
 }
 
-/* ============== مزامنة JSONP مع GAS ============== */
-/**
- * إستدعاء JSONP عام:
- * params يجب أن تحتوي على callback=__cbName
- */
+/* ============== JSONP Sync with GAS ============== */
 function jsonp(url) {
   return new Promise((resolve, reject) => {
     const cb = "__jsonp_cb_" + Math.random().toString(36).slice(2);
@@ -670,27 +686,26 @@ function jsonp(url) {
   });
 }
 
-/** تحميل أولي من GAS (اختياري) */
+/** Optional initial load from GAS */
 async function loadFromGAS() {
   try {
     const url = buildJsonpUrl(state.gasBase, { action: "pullAll" });
     const res = await jsonp(url);
     if (res && Array.isArray(res.records)) {
-      // دمج بدون تكرار حسب id
       const map = new Map(state.patientsAll.map((r) => [r.id, r]));
       for (const r of res.records) map.set(r.id, r);
       state.patientsAll = [...map.values()];
       store.saveAll();
       renderTable();
       updateCounters();
-      showToast("تم تحميل آخر نسخة من Google Sheets.", "success");
+      showToast("Loaded latest data from Google Sheets.", "success");
     }
   } catch (e) {
     console.warn("Load from GAS failed:", e);
   }
 }
 
-/** إرسال دفعة إلى GAS مع تقليل عدد الطلبات عبر التجميع */
+/** Chunked sync to GAS (start/parts/end) */
 async function syncAllToGAS({ silent = false } = {}) {
   try {
     const payload = JSON.stringify({
@@ -699,14 +714,11 @@ async function syncAllToGAS({ silent = false } = {}) {
       records: state.patientsAll,
     });
 
-    // لتجنب طول URL: نقسم
     const chunks = chunkString(encodeURIComponent(payload), 1500);
-    // البداية
     const startUrl = buildJsonpUrl(state.gasBase, { action: "syncStart", count: chunks.length });
     const start = await jsonp(startUrl);
     if (!start || !start.ok) throw new Error("syncStart failed");
 
-    // دفعات
     for (let i = 0; i < chunks.length; i++) {
       const partUrl = buildJsonpUrl(state.gasBase, {
         action: "syncPart",
@@ -717,20 +729,19 @@ async function syncAllToGAS({ silent = false } = {}) {
       if (!part || !part.ok) throw new Error(`syncPart ${i} failed`);
     }
 
-    // إنهاء
     const endUrl = buildJsonpUrl(state.gasBase, { action: "syncEnd" });
     const end = await jsonp(endUrl);
     if (!end || !end.ok) throw new Error("syncEnd failed");
 
-    if (!silent) showToast("تمت المزامنة مع Google Sheets.", "success");
+    if (!silent) showToast("Synced with Google Sheets.", "success");
     localStorage.setItem(KEYS.lastSync, new Date().toISOString());
   } catch (e) {
-    showToast("فشل المزامنة مع Google Sheets.", "danger");
+    showToast("Sync with Google Sheets failed.", "danger");
     console.error(e);
   }
 }
 
-/* ============== تفضيلات ============== */
+/* ============== Preferences ============== */
 function fillPrefsForm() {
   el.prefSpeed.value = state.prefs.speed;
   el.prefMotion.value = state.prefs.motion;
@@ -753,10 +764,10 @@ function onSavePrefs(e) {
   store.savePrefs();
   applyMotionAndDensity();
   closeModal(el.modalPrefs);
-  showToast("تم حفظ التفضيلات.", "success");
+  showToast("Preferences saved.", "success");
 }
 
-/* ============== أحداث البداية ============== */
+/* ============== First-run helper ============== */
 function firstRunToastIfNewDay() {
   const storedDay = localStorage.getItem(KEYS.day);
   const t = todayISO();
@@ -764,19 +775,18 @@ function firstRunToastIfNewDay() {
     state.currentDay = t;
     store.saveDay();
     el.todayLabel.textContent = state.currentDay;
-    showToast(`تم بدء يوم جديد وحفظ كل السابق (${t}).`, "info");
+    showToast(`New day started and previous data preserved (${t}).`, "info");
   }
 }
 
-/* ============== boot ============== */
+/* ============== Boot ============== */
 (function boot() {
   store.load();
   initUI();
   firstRunToastIfNewDay();
-  // تحميل من GAS (اختياري: يمكنك التعليق إذا لا تريد سحب تلقائي)
+  // Optional auto-load:
   // loadFromGAS();
 })();
 
-/* ============== تحسينات UX صغيرة ============== */
-// عند اختيار "other" في التولبار، يمكن استخدام النص افتراضياً عند الإضافة
-// محمول في openPatientModal عبر قراءة outTypeSelect/outTypeOther
+/* ============== Small UX helpers ============== */
+// "other" in toolbar handled above; patient modal uses normalized value too
