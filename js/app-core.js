@@ -1,42 +1,44 @@
 /* =========================================================
-   js/app-core.js
-   منطق التطبيق الأساسي: الحالة العامة، اليوم الجديد، التفضيلات،
-   العدّادات، والتكامل مع طبقة GAS
+   js/app-core.js (EN updated)
+   Core app logic: global state, new-day notice, preferences,
+   counters, and GAS integration.
+   - Keeps compatibility with ui-view.js
+   - Aware of new fields: response_time, delay_reason
    ========================================================= */
 
 (function (global) {
   "use strict";
 
   // ------------------------------------------------------
-  // الحالة العامة (Singleton)
+  // Global State (Singleton)
   // ------------------------------------------------------
   const state = {
-    todayKey: "",                 // مفتاح اليوم الحالي بصيغة YYYY-MM-DD
-    data: [],                     // كل السجلات القادمة من GAS
-    filtered: [],                 // نتائج الفلترة الحالية
+    todayKey: "",                 // YYYY-MM-DD
+    data: [],                     // all records pulled from GAS
+    filtered: [],                 // current filtered view
     filters: {
       department: "",
       intervention: "",
       member: "",
-      date: "",                   // بصيغة YYYY-MM-DD
+      date: "",                   // YYYY-MM-DD
     },
-    teamMembers: ["جواد ابو صبحة", "اصالة نوباني", "امين دحدولان"],
+    teamMembers: ["جواد أبو صبحة", "أصالة نوباني", "أمين دحدولان"],
     interventions: [
       "refill medication",
       "reassessment/dose modification",
       "new assessment/new patient",
     ],
-    departments: new Set(),       // يُملأ ديناميكيًا من البيانات
+    departments: new Set(),       // collected dynamically from data
     preferences: {
-      theme: "ocean",             // افتراضي
+      theme: "ocean",
       transitionSpeed: 300,       // ms
       transitionStyle: "fade",    // fade | slide | glow
-      gasUrl: "",                 // ممكن تغييره من preferences
+      gasUrl: "",                 // can be changed from preferences
     },
   };
 
   // ------------------------------------------------------
-  // أدوات وقت/تواريخ
+  // Date helpers
   // ------------------------------------------------------
   function toYMD(d = new Date()) {
     const y = d.getFullYear();
@@ -46,7 +48,7 @@
   }
 
   function fromDdMmYyyyToYmd(ddmmyyyy) {
-    // مدخل مثل 31/10/2025 -> 2025-10-31
+    // e.g. "31/10/2025" -> "2025-10-31"
     if (!ddmmyyyy || !ddmmyyyy.includes("/")) return "";
     const [dd, mm, yyyy] = ddmmyyyy.split("/");
     if (!yyyy) return "";
@@ -54,7 +56,7 @@
   }
 
   // ------------------------------------------------------
-  // تخزين محلي (localStorage)
+  // Local Storage
   // ------------------------------------------------------
   const LS_KEYS = {
     LAST_DAY: "palMon.lastDay",
@@ -83,14 +85,14 @@
     let last = "";
     try { last = localStorage.getItem(LS_KEYS.LAST_DAY) || ""; } catch {}
     if (last !== today) {
-      // يوم جديد
+      // New day
       try { localStorage.setItem(LS_KEYS.LAST_DAY, today); } catch {}
-      UI.notify("تم بدء يوم جديد وحفظ كل السابق ✅");
+      UI.notify("A new day has started. Previous data preserved ✅");
     }
   }
 
   // ------------------------------------------------------
-  // تهيئة GAS URL من التفضيلات (إن وُجد)
+  // GAS URL from preferences (if provided)
   // ------------------------------------------------------
   function initGasUrl() {
     if (state.preferences.gasUrl && window.GAS && typeof GAS.setGasUrl === "function") {
@@ -99,31 +101,50 @@
   }
 
   // ------------------------------------------------------
-  // جلب البيانات وتحديث الحالة
+  // Fetch data & update state
   // ------------------------------------------------------
   async function refreshData({ force = false } = {}) {
+    // Expecting GAS.getAllRecords to return array of row-objects with headers:
+    // id, date, name, code, inout, outtype, dept, intervention, member, response_time, delay_reason, notes
     const list = await GAS.getAllRecords({ force });
-    // تحديث الأقسام من البيانات
+
+    // Prepare departments from data
     state.departments = new Set();
     list.forEach((r) => {
-      const d = (r["Department"] || "").trim();
+      const d = (r["Department"] || r["dept"] || "").toString().trim();
       if (d) state.departments.add(d);
     });
-    state.data = normalizeDates(list);
+
+    state.data = normalizeRecords(list);
     applyFilters();
   }
 
-  function normalizeDates(list) {
-    // تحويل Date "31/10/2025" إلى YMD لمقارنة الفلاتر بسهولة
+  function normalizeRecords(list) {
+    // Normalize to unified keys + add __ymd for easy date filtering
     return (list || []).map((r) => {
-      const copy = { ...r };
-      copy.__ymd = fromDdMmYyyyToYmd(String(r.Date || "").trim()) || "";
+      const copy = {
+        id: r.id,
+        date: r.date,
+        name: r["Patient Name"] ?? r.name,
+        code: r["Patient Code"] ?? r.code,
+        inout: r.inout,
+        outtype: r.outtype,
+        dept: r["Department"] ?? r.dept,
+        intervention: r["Intervention"] ?? r.intervention,
+        member: r["Palliative Member"] ?? r.member,
+        response_time: r["response_time"] ?? r.response_time ?? "",
+        delay_reason: r["delay_reason"] ?? r.delay_reason ?? "",
+        notes: r.notes,
+      };
+      // Allow DD/MM/YYYY fallback then normalize
+      const rawDate = (copy.date || "").toString().trim();
+      copy.__ymd = rawDate.includes("/") ? fromDdMmYyyyToYmd(rawDate) : rawDate;
       return copy;
     });
   }
 
   // ------------------------------------------------------
-  // فلترة
+  // Filtering
   // ------------------------------------------------------
   function setFilter(key, value) {
     if (key in state.filters) {
@@ -135,14 +156,16 @@
   function applyFilters() {
     const f = state.filters;
     const arr = (state.data || []).filter((r) => {
-      const depOk = f.department ? (String(r["Department"] || "").trim() === f.department) : true;
-      const intOk = f.intervention ? (String(r["Intervention"] || "").trim().toLowerCase() === f.intervention.toLowerCase()) : true;
-      const memOk = f.member ? (String(r["Palliative Member"] || "").trim() === f.member) : true;
+      const depOk = f.department ? (String(r.dept || "").trim() === f.department) : true;
+      const intOk = f.intervention ? (String(r.intervention || "").trim().toLowerCase() === f.intervention.toLowerCase()) : true;
+      const memOk = f.member ? (String(r.member || "").trim() === f.member) : true;
       const dateOk = f.date ? (r.__ymd === f.date) : true;
       return depOk && intOk && memOk && dateOk;
     });
     state.filtered = arr;
-    UI.renderTable(arr);
+
+    // Render through UI facade
+    UI.renderTable(state.filtered);
     UI.renderCounters(counterByMember(state.filtered));
     UI.populateFilters({
       departments: Array.from(state.departments).sort(),
@@ -152,13 +175,13 @@
   }
 
   // ------------------------------------------------------
-  // عدادات الفريق
+  // Team counters (by member)
   // ------------------------------------------------------
   function counterByMember(list) {
     const counters = {};
     state.teamMembers.forEach((m) => (counters[m] = 0));
     (list || []).forEach((r) => {
-      const m = (r["Palliative Member"] || "").trim();
+      const m = (r.member || "").trim();
       if (!(m in counters)) counters[m] = 0;
       counters[m] += 1;
     });
@@ -166,7 +189,7 @@
   }
 
   // ------------------------------------------------------
-  // إضافة سجل يدويًا (يمكن استخدامه من الواجهة لاحقًا)
+  // Add a single record via GAS (optional API for UI)
   // ------------------------------------------------------
   async function addRecord(record) {
     await GAS.addRecord(record);
@@ -174,16 +197,16 @@
   }
 
   // ------------------------------------------------------
-  // استيراد CSV
+  // Import CSV via GAS endpoint
   // ------------------------------------------------------
   async function importCsvFile(file, { defaultDepartment = "", defaultMember = "" } = {}) {
     const { count, templateType } = await GAS.importCsvFile(file, { defaultDepartment, defaultMember });
-    UI.notify(`تم استيراد ${count} سجل (${templateType}).`);
+    UI.notify(`Imported ${count} record(s) (${templateType}).`);
     await refreshData({ force: true });
   }
 
   // ------------------------------------------------------
-  // تفضيلات (واجهة مبسطة)
+  // Preferences facade
   // ------------------------------------------------------
   function setPreference(key, value) {
     state.preferences[key] = value;
@@ -197,51 +220,51 @@
   }
 
   // ------------------------------------------------------
-  // API عام لـ UI
+  // Public API for UI
   // ------------------------------------------------------
   const API = {
-    // حالة
+    // state
     getState: () => state,
     getFilters: () => ({ ...state.filters }),
     setFilter,
     applyFilters,
 
-    // بيانات
+    // data
     refreshData,
 
-    // سجلات
+    // records
     addRecord,
 
-    // استيراد
+    // import
     importCsvFile,
 
-    // تفضيلات
+    // preferences
     setPreference,
 
-    // وقت/يوم
+    // day
     checkNewDayAndNotify,
   };
 
-  // إتاحة في window.App
+  // expose
   global.App = API;
 
   // ------------------------------------------------------
-  // تهيئة أولية
+  // Initial boot
   // ------------------------------------------------------
   document.addEventListener("DOMContentLoaded", async () => {
     loadPrefs();
     initGasUrl();
     checkNewDayAndNotify();
 
-    // ضبط الثيم والترانزشن من التفضيلات
+    // apply theme & transitions
     document.documentElement.setAttribute("data-theme", state.preferences.theme);
     UI.applyTransitionPrefs(state.preferences.transitionStyle, state.preferences.transitionSpeed);
 
-    // جلب البيانات وعرضها
+    // fetch and render
     try {
       await refreshData({ force: true });
     } catch (e) {
-      UI.notify("تعذر جلب البيانات من الخادم. تأكد من رابط GAS.", "error");
+      UI.notify("Failed to fetch data from server. Check GAS URL.", "error");
       console.error(e);
     }
   });
