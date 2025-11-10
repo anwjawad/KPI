@@ -56,7 +56,7 @@ export const DEFAULT_PREFERENCES = {
 
 /** Default GAS URL (can be edited prior to deploy) */
 export const DEFAULT_GAS_URL =
-  "https://script.google.com/macros/s/AKfycbzDcsaxkGQE2Zd6D06JvfENaXWlSfwWSnbZQs5Q1KpyFLFLWx-_0rlBChXqQkEYP2sN-g/exec";
+  "https://script.google.com/macros/s/AKfycbzkqaDTVFrTzytjoZDa99fBwOKSK_O1POsFZk0viM2RFJldZrVOGYB4IGPgXlkScDBH_g/exec";
 
 /** Canonical patient record schema */
 export const PatientSchema = {
